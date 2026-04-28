@@ -1,5 +1,0 @@
-[env]
-MACOSX_DEPLOYMENT_TARGET = "10.15"
-# Disable i8mm instruction set for whisper-rs-sys to fix compilation on ARM
-# See: https://github.com/ggml-org/whisper.cpp/issues/3427
-WHISPER_NO_I8MM = "1"

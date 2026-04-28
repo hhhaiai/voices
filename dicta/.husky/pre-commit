@@ -1,2 +1,0 @@
-echo "🔧 Running lint-staged on staged files..."
-pnpm lint-staged

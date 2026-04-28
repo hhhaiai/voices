@@ -1,4 +1,5 @@
 # Local reference repo (do not commit)
+dicta/
 
 # Model files (large binaries, downloaded at runtime)
 models/
@@ -6,8 +7,10 @@ models/
 # Third-party native builds (too large for git, built from source)
 voices-flutter/third_party/rust/
 voices-flutter/third_party/ort_patched/
-voices-flutter/third_party/**/.gradle/
-voices-flutter/third_party/**/build/
+voices-flutter/third_party/ios/*.a
+
+# Gradle caches
+.gradle/
 
 # macOS
 .DS_Store
