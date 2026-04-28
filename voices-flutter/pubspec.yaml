@@ -1,0 +1,44 @@
+name: voices_app
+description: "安卓优先的离线语音转文字应用（Whisper Tiny Phase 1）"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  dio: ^5.4.0
+  record: ^6.0.0
+  path_provider: ^2.1.2
+  permission_handler: ^11.1.0
+  go_router: ^13.0.0
+  shared_preferences: ^2.2.2
+  uuid: ^4.2.2
+  archive: ^3.4.0
+  crypto: ^3.0.5
+  sherpa_onnx: ^1.12.25
+  file_picker: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  riverpod_generator: ^2.3.9
+  build_runner: ^2.4.7
+  path_provider_platform_interface: ^2.1.2
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/
+    # MODEL_BUNDLE_BEGIN
+    - assets/models/whisper-tiny/
+    - assets/models/vosk-cn/
+    - assets/models/sensevoice-onnx/
+    # MODEL_BUNDLE_END

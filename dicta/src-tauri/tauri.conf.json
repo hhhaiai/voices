@@ -1,0 +1,82 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Dicta",
+  "version": "0.1.0",
+  "identifier": "com.nitintf.dicta",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Dicta",
+        "label": "main",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "resizable": true,
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "url": "/",
+        "decorations": true,
+        "transparent": false,
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 23
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: https://models.dev https://asset.localhost; media-src 'self' blob: tauri://localhost asset: https://asset.localhost;"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "endpoints": [
+        "https://github.com/nitintf/dicta/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwNEM3QUU5NDQxRDBGQUMKUldTc0R4MUU2WHBNc1BGaDBUZ0p3QVhGL3Nhdm13NkpRRDEzTTVCdFdMTkt6SWI3bTdWcW0xMEgK"
+    },
+    "webview": {
+      "windows": [
+        "main"
+      ],
+      "permissions": [
+        "allow-popups",
+        "allow-modals"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "../public/main.mp3",
+      "../public/cancel.wav"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "entitlements": "./entitlements.plist",
+      "hardenedRuntime": true,
+      "signingIdentity": "-"
+    }
+  }
+}

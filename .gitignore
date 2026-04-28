@@ -1,0 +1,29 @@
+# Local reference repo (do not commit)
+
+# Model files (large binaries, downloaded at runtime)
+models/
+
+# Third-party native builds (too large for git, built from source)
+voices-flutter/third_party/rust/
+voices-flutter/third_party/ort_patched/
+voices-flutter/third_party/**/.gradle/
+voices-flutter/third_party/**/build/
+
+# macOS
+.DS_Store
+
+# Flutter local build/cache artifacts
+voices-flutter/.dart_tool/
+voices-flutter/build/
+voices-flutter/.flutter-plugins
+voices-flutter/.flutter-plugins-dependencies
+voices-flutter/.packages
+
+# IDE/editor temp files
+.vscode/
+.idea/
+*.iml
+
+# Logs and temp
+*.log
+*.tmp
