@@ -248,6 +248,41 @@ class SherpaWhisperService {
     };
   }
 
+  /// 预热模型，执行一次哑推理以减少首次推理延迟
+  Future<Map<String, dynamic>> warmup() async {
+    final recognizer = _recognizer;
+    if (recognizer == null) {
+      return {'success': false, 'error': '模型未加载'};
+    }
+
+    try {
+      final stopwatch = Stopwatch()..start();
+
+      // 生成 500ms 静音音频
+      final numSamples = 8000; // 500ms @ 16kHz
+      final pcmData = Uint8List(numSamples * 2);
+      final floatSamples = _pcm16LeToFloat32(pcmData);
+
+      // 执行哑推理
+      final stream = recognizer.createStream();
+      try {
+        stream.acceptWaveform(samples: floatSamples, sampleRate: 16000);
+        recognizer.decode(stream);
+      } finally {
+        stream.free();
+      }
+
+      stopwatch.stop();
+
+      return {
+        'success': true,
+        'latencyMs': stopwatch.elapsedMilliseconds,
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   void _ensureBindings() {
     if (_bindingsInitialized) return;
     sherpa_onnx.initBindings();

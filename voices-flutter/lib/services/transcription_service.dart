@@ -4,6 +4,8 @@ import '../models/engine_instance.dart';
 import '../models/transcription_result.dart';
 import '../engines/backend_resolver.dart';
 import '../engines/base/engine_backend.dart';
+import '../text/sentence_splitter.dart';
+import '../text/text_normalizer.dart';
 import 'engine_instance_manager.dart';
 import 'model_download_manager.dart';
 
@@ -26,6 +28,8 @@ class TranscriptionService {
 
   final EngineInstanceManager _instanceManager = EngineInstanceManager();
   final ModelDownloadManager _modelManager = ModelDownloadManager();
+  final SentenceSplitter _sentenceSplitter = SentenceSplitter();
+  final TextNormalizer _textNormalizer = TextNormalizer();
 
   EngineBackend? _currentBackend;
   TranscriptionServiceState _state = TranscriptionServiceState.idle;
@@ -79,6 +83,13 @@ class TranscriptionService {
 
       if (loaded) {
         _state = TranscriptionServiceState.ready;
+
+        // 模型加载后执行预热，减少首次推理延迟
+        try {
+          await _currentBackend?.warmup();
+        } catch (_) {
+          // 预热失败不影响主流程，只是首次推理会稍慢
+        }
 
         // 更新实例状态
         await _instanceManager.updateInstanceState(
@@ -400,5 +411,63 @@ class TranscriptionService {
   }) async {
     _currentBackend = BackendResolver.resolve(engineId);
     return _currentBackend!.load(modelPath);
+  }
+
+  /// 将文本分割成句子片段
+  /// 返回带有多句片段的 TranscriptionResult
+  List<TranscriptionSegment> _splitIntoSegments(
+    String text,
+    Duration audioDuration,
+  ) {
+    if (text.isEmpty) {
+      return [
+        TranscriptionSegment(
+          text: text,
+          startTime: Duration.zero,
+          endTime: audioDuration,
+          confidence: 0.9,
+        ),
+      ];
+    }
+
+    // 使用句子分割器
+    final sentences = _sentenceSplitter.split(text);
+
+    if (sentences.isEmpty) {
+      return [
+        TranscriptionSegment(
+          text: text,
+          startTime: Duration.zero,
+          endTime: audioDuration,
+          confidence: 0.9,
+        ),
+      ];
+    }
+
+    // 将句子转换为 TranscriptionSegment
+    final segments = <TranscriptionSegment>[];
+    for (var i = 0; i < sentences.length; i++) {
+      final sentence = sentences[i];
+
+      // 根据句子在全文中的位置估算时间戳
+      final startRatio = sentence.startIndex / text.length;
+      final endRatio = sentence.endIndex / text.length;
+
+      final startTime = Duration(
+        milliseconds: (audioDuration.inMilliseconds * startRatio).round(),
+      );
+      final endTime = Duration(
+        milliseconds: (audioDuration.inMilliseconds * endRatio).round(),
+      );
+
+      segments.add(TranscriptionSegment(
+        text: sentence.text,
+        startTime: startTime,
+        endTime: endTime,
+        confidence: 0.9,
+      ));
+    }
+
+    return segments;
   }
 }

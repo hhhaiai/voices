@@ -4,11 +4,13 @@ import 'dart:typed_data';
 
 import '../../services/apple_speech_service.dart';
 import '../base/engine_backend.dart';
+import '../../performance/latency_tracker.dart';
 
 /// Apple Speech 引擎后端
 /// 使用 iOS/macOS 系统 Speech 框架
 class AppleSpeechBackend implements EngineBackend {
   final AppleSpeechService _service = AppleSpeechService();
+  final LatencyTracker _latencyTracker = LatencyTracker();
 
   BackendState _state = BackendState.idle;
   String? _lastError;
@@ -63,6 +65,7 @@ class AppleSpeechBackend implements EngineBackend {
 
   @override
   Future<void> unload() async {
+    _latencyTracker.reset();
     _partialResultController.add(''); // 清空 partial results
     await _service.unload();
     _service.setPartialResultCallback(null);
@@ -80,6 +83,8 @@ class AppleSpeechBackend implements EngineBackend {
   @override
   Future<String?> transcribeFile(String filePath) async {
     _state = BackendState.transcribing;
+    final stopwatch = Stopwatch()..start();
+
     try {
       final file = File(filePath);
       if (!await file.exists()) {
@@ -87,6 +92,8 @@ class AppleSpeechBackend implements EngineBackend {
       }
 
       final result = await _service.transcribeFile(filePath);
+      stopwatch.stop();
+      _latencyTracker.record(stopwatch.elapsedMicroseconds);
       _state = BackendState.ready;
 
       if (result.startsWith('Error:')) {
@@ -94,6 +101,7 @@ class AppleSpeechBackend implements EngineBackend {
       }
       return result;
     } catch (e) {
+      stopwatch.stop();
       _lastError = e.toString();
       _state = BackendState.error;
       return 'Error: $e';
@@ -101,14 +109,25 @@ class AppleSpeechBackend implements EngineBackend {
   }
 
   @override
+  Future<bool> warmup() async {
+    if (!isLoaded) return false;
+    // Apple Speech 使用系统框架，已经完成初始化
+    return true;
+  }
+
+  @override
+  Map<String, dynamic> latencyMetrics() => _latencyTracker.metrics.toMap();
+
+  @override
   Map<String, dynamic> statusMap() {
-    return {
+    final base = {
       'engineId': engineId,
       'state': _state.name,
       'isLoaded': isLoaded,
       'modelPath': modelPath,
       'lastError': _lastError,
     };
+    return {...base, ...latencyMetrics()};
   }
 
   @override
@@ -128,6 +147,7 @@ class AppleSpeechBackend implements EngineBackend {
 
   @override
   void dispose() {
+    _latencyTracker.reset();
     _partialResultController.close();
     unload();
   }

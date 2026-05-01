@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../../services/platform_transcription_service.dart';
 import '../base/engine_backend.dart';
+import '../../performance/latency_tracker.dart';
 
 /// Android 平台引擎后端
 /// 使用 MethodChannel 与原生代码通信
@@ -10,6 +11,7 @@ class PlatformEngineBackend implements EngineBackend {
   PlatformEngineBackend({this.engineId = 'whisper'});
 
   final PlatformTranscriptionService _service = PlatformTranscriptionService();
+  final LatencyTracker _latencyTracker = LatencyTracker();
 
   BackendState _state = BackendState.idle;
   String? _lastError;
@@ -58,6 +60,7 @@ class PlatformEngineBackend implements EngineBackend {
 
   @override
   Future<void> unload() async {
+    _latencyTracker.reset();
     try {
       await _service.unloadModel();
     } catch (_) {
@@ -76,15 +79,20 @@ class PlatformEngineBackend implements EngineBackend {
     }
 
     _state = BackendState.transcribing;
+    final stopwatch = Stopwatch()..start();
+
     try {
       final result = await _service.engineTranscribePcm(
         engineType: engineId,
         pcmData: pcmData,
         sampleRate: sampleRate,
       );
+      stopwatch.stop();
+      _latencyTracker.record(stopwatch.elapsedMicroseconds);
       _state = BackendState.ready;
       return result;
     } catch (e) {
+      stopwatch.stop();
       _lastError = e.toString();
       _state = BackendState.error;
       return 'Error: $e';
@@ -98,6 +106,8 @@ class PlatformEngineBackend implements EngineBackend {
     }
 
     _state = BackendState.transcribing;
+    final stopwatch = Stopwatch()..start();
+
     try {
       final file = File(filePath);
       if (!await file.exists()) {
@@ -108,9 +118,12 @@ class PlatformEngineBackend implements EngineBackend {
         engineType: engineId,
         filePath: filePath,
       );
+      stopwatch.stop();
+      _latencyTracker.record(stopwatch.elapsedMicroseconds);
       _state = BackendState.ready;
       return result;
     } catch (e) {
+      stopwatch.stop();
       _lastError = e.toString();
       _state = BackendState.error;
       return 'Error: $e';
@@ -118,14 +131,25 @@ class PlatformEngineBackend implements EngineBackend {
   }
 
   @override
+  Future<bool> warmup() async {
+    if (!isLoaded) return false;
+    // Android 平台引擎预热由 native 处理
+    return true;
+  }
+
+  @override
+  Map<String, dynamic> latencyMetrics() => _latencyTracker.metrics.toMap();
+
+  @override
   Map<String, dynamic> statusMap() {
-    return {
+    final base = {
       'engineId': engineId,
       'state': _state.name,
       'isLoaded': isLoaded,
       'modelPath': _modelPath,
       'lastError': _lastError,
     };
+    return {...base, ...latencyMetrics()};
   }
 
   @override
@@ -145,6 +169,7 @@ class PlatformEngineBackend implements EngineBackend {
 
   @override
   void dispose() {
+    _latencyTracker.reset();
     unload();
   }
 }

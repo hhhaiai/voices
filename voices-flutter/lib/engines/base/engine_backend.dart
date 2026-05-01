@@ -76,6 +76,15 @@ abstract class EngineBackend {
     return null;
   }
 
+  /// 预热模型
+  /// 在模型加载后执行一次哑推理，以减少首次推理的冷启动延迟
+  /// 返回预热是否成功
+  Future<bool> warmup() async => true;
+
+  /// 获取延迟监控指标
+  /// 返回各阶段耗时统计
+  Map<String, dynamic> latencyMetrics() => {};
+
   /// 清理资源
   void dispose();
 }

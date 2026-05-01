@@ -2,11 +2,13 @@ import 'dart:typed_data';
 
 import '../../services/sensevoice_onnx_service.dart';
 import '../base/engine_backend.dart';
+import '../../performance/latency_tracker.dart';
 
 /// SenseVoice ONNX 引擎后端
 /// 使用 sherpa_onnx Dart 包进行推理
 class SenseVoiceBackend implements EngineBackend {
   final SenseVoiceOnnxService _service = SenseVoiceOnnxService();
+  final LatencyTracker _latencyTracker = LatencyTracker();
 
   BackendState _state = BackendState.idle;
 
@@ -46,6 +48,7 @@ class SenseVoiceBackend implements EngineBackend {
 
   @override
   Future<void> unload() async {
+    _latencyTracker.reset();
     await _service.unload();
     _state = BackendState.idle;
   }
@@ -57,11 +60,16 @@ class SenseVoiceBackend implements EngineBackend {
     }
 
     _state = BackendState.transcribing;
+    final stopwatch = Stopwatch()..start();
+
     try {
       final result = await _service.transcribePcm(pcmData, sampleRate);
+      stopwatch.stop();
+      _latencyTracker.record(stopwatch.elapsedMicroseconds);
       _state = BackendState.ready;
       return result;
     } catch (e) {
+      stopwatch.stop();
       _state = BackendState.error;
       return 'Error: $e';
     }
@@ -74,25 +82,41 @@ class SenseVoiceBackend implements EngineBackend {
     }
 
     _state = BackendState.transcribing;
+    final stopwatch = Stopwatch()..start();
+
     try {
       final result = await _service.transcribeFile(filePath);
+      stopwatch.stop();
+      _latencyTracker.record(stopwatch.elapsedMicroseconds);
       _state = BackendState.ready;
       return result;
     } catch (e) {
+      stopwatch.stop();
       _state = BackendState.error;
       return 'Error: $e';
     }
   }
 
   @override
+  Future<bool> warmup() async {
+    if (!isLoaded) return false;
+    // TODO: 实现 SenseVoice 模型预热
+    return true;
+  }
+
+  @override
+  Map<String, dynamic> latencyMetrics() => _latencyTracker.metrics.toMap();
+
+  @override
   Map<String, dynamic> statusMap() {
-    return {
+    final base = {
       'engineId': engineId,
       'state': _state.name,
       'isLoaded': isLoaded,
       'modelPath': modelPath,
       'lastError': lastError,
     };
+    return {...base, ...latencyMetrics()};
   }
 
   @override
@@ -112,6 +136,7 @@ class SenseVoiceBackend implements EngineBackend {
 
   @override
   void dispose() {
+    _latencyTracker.reset();
     unload();
   }
 }
