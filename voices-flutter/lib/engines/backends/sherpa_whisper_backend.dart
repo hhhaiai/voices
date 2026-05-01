@@ -10,7 +10,7 @@ import '../../performance/latency_tracker.dart';
 class SherpaWhisperBackend implements EngineBackend {
   final SherpaWhisperService _service = SherpaWhisperService();
   final LatencyTracker _latencyTracker = LatencyTracker();
-  WhisperConfig _config = const WhisperConfig();
+  final WhisperConfig _config = const WhisperConfig();
 
   BackendState _state = BackendState.idle;
 

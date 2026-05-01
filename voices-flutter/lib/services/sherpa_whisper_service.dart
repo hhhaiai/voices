@@ -264,7 +264,7 @@ class SherpaWhisperService {
       final stopwatch = Stopwatch()..start();
 
       // 生成 500ms 静音音频
-      final numSamples = 8000; // 500ms @ 16kHz
+      const numSamples = 8000; // 500ms @ 16kHz
       final pcmData = Uint8List(numSamples * 2);
       final floatSamples = _pcm16LeToFloat32(pcmData);
 

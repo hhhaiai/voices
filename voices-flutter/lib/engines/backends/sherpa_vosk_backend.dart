@@ -10,7 +10,7 @@ import '../../performance/latency_tracker.dart';
 class SherpaVoskBackend implements EngineBackend {
   final SherpaVoskService _service = SherpaVoskService();
   final LatencyTracker _latencyTracker = LatencyTracker();
-  VoskConfig _config = const VoskConfig();
+  final VoskConfig _config = const VoskConfig();
 
   BackendState _state = BackendState.idle;
 

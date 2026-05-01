@@ -10,7 +10,7 @@ import '../../performance/latency_tracker.dart';
 class SenseVoiceBackend implements EngineBackend {
   final SenseVoiceOnnxService _service = SenseVoiceOnnxService();
   final LatencyTracker _latencyTracker = LatencyTracker();
-  SenseVoiceConfig _config = const SenseVoiceConfig();
+  final SenseVoiceConfig _config = const SenseVoiceConfig();
 
   BackendState _state = BackendState.idle;
 
