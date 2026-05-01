@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
+import '../models/engine_config.dart';
+
 class SherpaWhisperService {
   static final SherpaWhisperService _instance =
       SherpaWhisperService._internal();
@@ -14,15 +16,18 @@ class SherpaWhisperService {
   String? _tokensPath;
   String? _lastError;
   static bool _bindingsInitialized = false;
+  WhisperConfig _config = const WhisperConfig();
 
   bool get isLoaded => _recognizer != null;
   String? get modelDir => _modelDir;
   String? get tokensPath => _tokensPath;
   String? get lastError => _lastError;
+  WhisperConfig get config => _config;
 
-  Future<bool> loadModel(String modelPathOrDir) async {
+  Future<bool> loadModel(String modelPathOrDir, {WhisperConfig? engineConfig}) async {
     await unload();
     _lastError = null;
+    _config = engineConfig ?? const WhisperConfig();
 
     final resolvedDir = await _resolveModelDir(modelPathOrDir);
     if (resolvedDir == null) {
@@ -45,14 +50,14 @@ class SherpaWhisperService {
         whisper: sherpa_onnx.OfflineWhisperModelConfig(
           encoder: modelPaths.encoder,
           decoder: modelPaths.decoder,
-          language: 'auto',
-          task: 'transcribe',
-          tailPaddings: -1,
+          language: _config.language,
+          task: _config.task,
+          tailPaddings: _config.tailPaddings,
         ),
         tokens: modelPaths.tokens,
-        numThreads: 2,
-        debug: false,
-        provider: 'cpu',
+        numThreads: _config.numThreads,
+        debug: _config.debug,
+        provider: _config.provider,
       ),
     );
 

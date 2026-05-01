@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
+import '../models/engine_config.dart';
+
 class SherpaVoskService {
   static final SherpaVoskService _instance = SherpaVoskService._internal();
   factory SherpaVoskService() => _instance;
@@ -13,15 +15,18 @@ class SherpaVoskService {
   String? _tokensPath;
   String? _lastError;
   static bool _bindingsInitialized = false;
+  VoskConfig _config = const VoskConfig();
 
   bool get isLoaded => _recognizer != null;
   String? get modelPath => _modelPath;
   String? get tokensPath => _tokensPath;
   String? get lastError => _lastError;
+  VoskConfig get config => _config;
 
-  Future<bool> loadModel(String modelPathOrDir) async {
+  Future<bool> loadModel(String modelPathOrDir, {VoskConfig? engineConfig}) async {
     await unload();
     _lastError = null;
+    _config = engineConfig ?? const VoskConfig();
 
     final resolvedDir = await _resolveModelDir(modelPathOrDir);
     if (resolvedDir == null) {
@@ -50,9 +55,9 @@ class SherpaVoskService {
           joiner: modelPaths.joiner,
         ),
         tokens: modelPaths.tokens,
-        numThreads: 2,
-        debug: false,
-        provider: 'cpu',
+        numThreads: _config.numThreads,
+        debug: _config.debug,
+        provider: _config.provider,
       ),
     );
 

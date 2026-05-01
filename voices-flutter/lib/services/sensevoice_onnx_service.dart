@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
+import '../models/engine_config.dart';
 import '../utils/sensevoice_metadata_fixer.dart';
 
 class SenseVoiceOnnxService {
@@ -18,15 +19,18 @@ class SenseVoiceOnnxService {
   String? _tokensPath;
   String? _lastError;
   static bool _bindingsInitialized = false;
+  SenseVoiceConfig _config = const SenseVoiceConfig();
 
   bool get isLoaded => _recognizer != null;
   String? get modelPath => _modelPath;
   String? get tokensPath => _tokensPath;
   String? get lastError => _lastError;
+  SenseVoiceConfig get config => _config;
 
-  Future<bool> loadModel(String modelPathOrDir) async {
+  Future<bool> loadModel(String modelPathOrDir, {SenseVoiceConfig? engineConfig}) async {
     await unload();
     _lastError = null;
+    _config = engineConfig ?? const SenseVoiceConfig();
 
     final resolved = await _resolveModelAndTokens(modelPathOrDir);
     if (resolved == null) {
@@ -61,13 +65,13 @@ class SenseVoiceOnnxService {
       model: sherpa_onnx.OfflineModelConfig(
         senseVoice: sherpa_onnx.OfflineSenseVoiceModelConfig(
           model: modelPath,
-          language: 'auto',
-          useInverseTextNormalization: true,
+          language: _config.language,
+          useInverseTextNormalization: _config.useInverseTextNormalization,
         ),
         tokens: resolved.tokensPath,
-        numThreads: 2,
-        debug: false,
-        provider: 'cpu',
+        numThreads: _config.numThreads,
+        debug: _config.debug,
+        provider: _config.provider,
       ),
     );
 

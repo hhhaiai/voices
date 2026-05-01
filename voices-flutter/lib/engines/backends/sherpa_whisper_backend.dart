@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../models/engine_config.dart';
 import '../../services/sherpa_whisper_service.dart';
 import '../base/engine_backend.dart';
 import '../../performance/latency_tracker.dart';
@@ -9,6 +10,7 @@ import '../../performance/latency_tracker.dart';
 class SherpaWhisperBackend implements EngineBackend {
   final SherpaWhisperService _service = SherpaWhisperService();
   final LatencyTracker _latencyTracker = LatencyTracker();
+  WhisperConfig _config = const WhisperConfig();
 
   BackendState _state = BackendState.idle;
 
@@ -32,7 +34,7 @@ class SherpaWhisperBackend implements EngineBackend {
     _state = BackendState.loading;
 
     try {
-      final result = await _service.loadModel(modelPath);
+      final result = await _service.loadModel(modelPath, engineConfig: _config);
       if (result) {
         _state = BackendState.ready;
         return true;
@@ -120,6 +122,7 @@ class SherpaWhisperBackend implements EngineBackend {
       'isLoaded': isLoaded,
       'modelPath': modelPath,
       'lastError': lastError,
+      'config': _config.toMap(),
     };
     return {...base, ...latencyMetrics()};
   }

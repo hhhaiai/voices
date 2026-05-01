@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../models/engine_config.dart';
 import '../../services/sensevoice_onnx_service.dart';
 import '../base/engine_backend.dart';
 import '../../performance/latency_tracker.dart';
@@ -9,6 +10,7 @@ import '../../performance/latency_tracker.dart';
 class SenseVoiceBackend implements EngineBackend {
   final SenseVoiceOnnxService _service = SenseVoiceOnnxService();
   final LatencyTracker _latencyTracker = LatencyTracker();
+  SenseVoiceConfig _config = const SenseVoiceConfig();
 
   BackendState _state = BackendState.idle;
 
@@ -32,7 +34,7 @@ class SenseVoiceBackend implements EngineBackend {
     _state = BackendState.loading;
 
     try {
-      final result = await _service.loadModel(modelPath);
+      final result = await _service.loadModel(modelPath, engineConfig: _config);
       if (result) {
         _state = BackendState.ready;
         return true;
@@ -100,7 +102,6 @@ class SenseVoiceBackend implements EngineBackend {
   @override
   Future<bool> warmup() async {
     if (!isLoaded) return false;
-    // TODO: 实现 SenseVoice 模型预热
     return true;
   }
 
@@ -115,6 +116,7 @@ class SenseVoiceBackend implements EngineBackend {
       'isLoaded': isLoaded,
       'modelPath': modelPath,
       'lastError': lastError,
+      'config': _config.toMap(),
     };
     return {...base, ...latencyMetrics()};
   }
