@@ -48,7 +48,7 @@ class TextNormalizer {
   };
 
   /// 规范化文本
-  String normalize(String text) {
+  String normalize(String text, {bool stripTrailingPunctuation = false}) {
     if (text.isEmpty) return text;
 
     var result = text;
@@ -70,6 +70,11 @@ class TextNormalizer {
 
     // 规范化引号
     result = _normalizeQuotes(result);
+
+    // 短文本实时片段经常带尾部点号，先去掉，最终句号由停录后统一补齐
+    if (stripTrailingPunctuation && result.length <= 12) {
+      result = result.replaceAll(RegExp(r'[。\.]$'), '');
+    }
 
     return result.trim();
   }
@@ -153,12 +158,24 @@ class TextNormalizer {
     var result = text.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '');
 
     // 保留中文、英文、数字、常用标点
-    // 清理 emoji 和特殊符号
-    result = result.replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}]'), ''); // emoticons
-    result = result.replaceAll(RegExp(r'[\u{1F300}-\u{1F5FF}]'), ''); // misc symbols
-    result = result.replaceAll(RegExp(r'[\u{1F680}-\u{1F6FF}]'), ''); // transport
+    // 清理 emoji 和特殊符号（使用 Unicode 码点）
+    result = _removeEmojiRange(result, 0x1F600, 0x1F64F); // emoticons
+    result = _removeEmojiRange(result, 0x1F300, 0x1F5FF); // misc symbols
+    result = _removeEmojiRange(result, 0x1F680, 0x1F6FF); // transport
 
     return result;
+  }
+
+  /// 移除指定 Unicode 范围内的字符
+  String _removeEmojiRange(String text, int start, int end) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < text.length; i++) {
+      final code = text.codeUnitAt(i);
+      if (code < start || code > end) {
+        buffer.writeCharCode(code);
+      }
+    }
+    return buffer.toString();
   }
 
   /// 规范化引号
