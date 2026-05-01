@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,6 +12,8 @@ class AppleSpeechBackend implements EngineBackend {
 
   BackendState _state = BackendState.idle;
   String? _lastError;
+  final StreamController<String> _partialResultController =
+      StreamController<String>.broadcast();
 
   @override
   String get engineId => 'apple_speech';
@@ -27,14 +30,28 @@ class AppleSpeechBackend implements EngineBackend {
   @override
   String? get modelPath => null; // Apple Speech 不需要模型文件
 
+  /// Partial results stream for real-time transcription
+  Stream<String> get partialResults => _partialResultController.stream;
+
   @override
   Future<bool> load(String modelPath) async {
-    // Apple Speech 不需要加载模型，检查可用性即可
     _state = BackendState.loading;
     _lastError = null;
 
     try {
-      // Apple Speech 始终可用（在支持的平台上）
+      // 启动 native 实时语音识别
+      final ok = await _service.startPcmTranscription();
+      if (!ok) {
+        _lastError = '启动实时语音识别失败';
+        _state = BackendState.error;
+        return false;
+      }
+
+      // 设置 partial results 回调
+      _service.setPartialResultCallback((text) {
+        _partialResultController.add(text);
+      });
+
       _state = BackendState.ready;
       return true;
     } catch (e) {
@@ -46,14 +63,18 @@ class AppleSpeechBackend implements EngineBackend {
 
   @override
   Future<void> unload() async {
+    _partialResultController.add(''); // 清空 partial results
     await _service.unload();
+    _service.setPartialResultCallback(null);
     _state = BackendState.idle;
   }
 
   @override
   Future<String?> transcribePcm(Uint8List pcmData, int sampleRate) async {
-    // Apple Speech 不支持实时 PCM 流转写
-    return 'Error: Apple Speech 当前不支持实时麦克风转写，仅支持音频文件转写';
+    // Apple Speech 实时模式下，音频由 AVAudioEngine 在 native 端直接捕获
+    // 此方法不需要处理 PCM，results 通过 partialResults stream 推送
+    // 返回空字符串，实际识别结果通过 stream 获取
+    return '';
   }
 
   @override
@@ -107,6 +128,7 @@ class AppleSpeechBackend implements EngineBackend {
 
   @override
   void dispose() {
+    _partialResultController.close();
     unload();
   }
 }

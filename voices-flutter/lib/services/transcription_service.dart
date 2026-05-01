@@ -108,8 +108,14 @@ class TranscriptionService {
 
   /// 卸载当前引擎
   Future<void> unloadEngine() async {
-    await _currentBackend?.unload();
+    final backend = _currentBackend;
     _currentBackend = null;
+    if (backend != null) {
+      // 先 await unload() 确保异步资源释放
+      await backend.unload();
+      // 再调用 dispose() 释放同步资源（如 StreamController）
+      backend.dispose();
+    }
     _state = TranscriptionServiceState.idle;
     _currentModelPath = null;
     _currentEngineId = null;
