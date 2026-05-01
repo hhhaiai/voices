@@ -2,7 +2,7 @@
 dicta/
 
 # Model files (large binaries, downloaded at runtime)
-models/
+/models/
 
 # Third-party native builds (too large for git, built from source)
 voices-flutter/third_party/rust/

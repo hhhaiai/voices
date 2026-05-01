@@ -504,3 +504,32 @@ Future<void> unloadEngine() async {
 - `flutter analyze`：无错误
 - `flutter test`：84 个测试全部通过
 - `flutter build apk --debug`：通过
+
+## 本轮更新（2026-05-02）
+
+### Phase 5 完成：引擎配置参数支持 + 默认线程数优化
+
+**引擎配置类**：
+- `WhisperConfig`：language, task, tailPaddings, numThreads, provider, debug
+- `SenseVoiceConfig`：language, useInverseTextNormalization, numThreads, provider, debug
+- `VoskConfig`：numThreads, provider, debug
+
+**默认参数优化**：
+- 所有引擎 `numThreads` 从 2 提升到 4，提升现代多核设备性能
+
+**Git 修复**：
+- 修复 `.gitignore`：`models/` → `/models/`（避免误匹配 `voices-flutter/lib/models/`）
+- 添加 `lib/models/` 目录到 git（6 个文件：audio_input.dart, engine_config.dart, engine_definition.dart, engine_instance.dart, model_registry.dart, transcription_result.dart）
+
+### Phase 4 验证完成
+
+- 音频前处理：VAD、重采样、分段、增益（`lib/audio/`）
+- 文本后处理：标点、断句、空格规范化（`lib/text/`）
+- 性能框架：预热、延迟追踪、并发配置（`lib/performance/`）
+
+### 验证
+
+- `flutter analyze`：无错误
+- `flutter test`：84 个测试全部通过
+- `flutter build apk --debug`：通过
+- `flutter build ios --simulator --no-codesign`：通过
