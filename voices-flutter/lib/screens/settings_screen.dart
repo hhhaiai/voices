@@ -23,6 +23,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final activeInstance = ref.watch(activeInstanceProvider);
     final downloadedModelsAsync = ref.watch(downloadedModelsListProvider);
     final downloadState = ref.watch(modelDownloadStateProvider);
+    final latencyMetrics = ref.watch(latencyMetricsProvider);
     final hasActiveDownloads = downloadState.items.values.any(
       (item) => item.status == ModelDownloadStatus.downloading,
     );
@@ -432,9 +433,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: hasActiveDownloads ? null : _showClearCacheDialog,
             ),
           ),
+          if (latencyMetrics.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '性能指标',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildLatencyRow(
+                      '推理次数',
+                      '${latencyMetrics['inferenceCount'] ?? 0}',
+                    ),
+                    _buildLatencyRow(
+                      '冷启动延迟',
+                      _formatLatency(latencyMetrics['coldStartLatencyMs']),
+                    ),
+                    _buildLatencyRow(
+                      '最近延迟',
+                      _formatLatency(latencyMetrics['lastLatencyMs']),
+                    ),
+                    _buildLatencyRow(
+                      '平均延迟',
+                      _formatLatency(latencyMetrics['averageLatencyMs']),
+                    ),
+                    _buildLatencyRow(
+                      '最小延迟',
+                      _formatLatency(latencyMetrics['minLatencyMs']),
+                    ),
+                    _buildLatencyRow(
+                      '最大延迟',
+                      _formatLatency(latencyMetrics['maxLatencyMs']),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _buildLatencyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  String _formatLatency(dynamic micros) {
+    if (micros == null || micros == 0) return '-';
+    final ms = (micros as int) / 1000;
+    return '${ms.toStringAsFixed(1)}ms';
   }
 
   Future<void> _downloadModel(

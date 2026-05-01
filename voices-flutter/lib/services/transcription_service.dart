@@ -380,4 +380,18 @@ class TranscriptionService {
     _currentBackend = BackendResolver.resolve(engineId);
     return _currentBackend!.load(modelPath);
   }
+
+  /// 获取当前引擎的延迟监控指标
+  /// 返回各阶段耗时统计，如果引擎未加载则返回空 Map
+  Map<String, dynamic> getLatencyMetrics() {
+    if (_currentBackend == null) return {};
+    return _currentBackend!.latencyMetrics();
+  }
+
+  /// 获取当前引擎的状态信息
+  /// 包含引擎 ID、状态、模型路径、延迟指标等
+  Map<String, dynamic> getStatusMap() {
+    if (_currentBackend == null) return {};
+    return _currentBackend!.statusMap();
+  }
 }

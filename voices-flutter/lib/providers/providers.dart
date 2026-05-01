@@ -352,3 +352,10 @@ class TranscriptionStateNotifier extends StateNotifier<TranscriptionState> {
     state = const TranscriptionState();
   }
 }
+
+/// 延迟指标 Provider
+/// 监听转写状态变化，定期获取延迟指标
+final latencyMetricsProvider = Provider<Map<String, dynamic>>((ref) {
+  final service = ref.watch(transcriptionServiceProvider);
+  return service.getLatencyMetrics();
+});
