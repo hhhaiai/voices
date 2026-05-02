@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -11,6 +12,7 @@ import '../models/engine_definition.dart';
 import '../models/model_registry.dart';
 import '../utils/model_format_adapter.dart';
 import '../utils/model_format_detector.dart';
+import 'background_download_service.dart';
 
 /// 模型下载信息
 class ModelDownloadInfo {
@@ -45,8 +47,36 @@ class ModelDownloadManager {
       connectTimeout: const Duration(seconds: 30),
       sendTimeout: const Duration(minutes: 2),
       receiveTimeout: const Duration(minutes: 15),
+      followRedirects: true,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': 'Voices/1.0 (Flutter STT App)',
+        'Accept': '*/*',
+      },
     ),
-  );
+  )..interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) {
+          if (error.type == DioExceptionType.badResponse) {
+            final statusCode = error.response?.statusCode;
+            final message = 'HTTP $statusCode: ${error.message}';
+            handler.next(
+              DioException(
+                requestOptions: error.requestOptions,
+                response: error.response,
+                type: error.type,
+                message: message,
+              ),
+            );
+          } else {
+            handler.next(error);
+          }
+        },
+      ),
+    );
+
+  final BackgroundDownloadService _backgroundDownloadService =
+      BackgroundDownloadService();
   final Map<String, double> _downloadProgress = {};
   static const String _modelPathPrefix = 'model_path_';
   static const String _externalPathsKey = 'external_model_search_paths';
@@ -277,18 +307,27 @@ class ModelDownloadManager {
         final filePath = '$tempPath/$resolvedFileName';
 
         final totalUrls = downloadUrls.length;
-        await _dio.download(
-          currentUrl,
-          filePath,
-          onReceiveProgress: (received, total) {
-            if (total != -1) {
-              final perFileProgress = received / total;
-              final overallProgress = (i + perFileProgress) / totalUrls;
-              _downloadProgress[engine.id] = overallProgress;
-              onProgress?.call(overallProgress);
-            }
-          },
-        );
+
+        // iOS 使用系统后台下载，其他平台使用 Dio
+        if (Platform.isIOS && _backgroundDownloadService.isSupported) {
+          await _downloadWithBackgroundService(
+            downloadId: '${engine.id}_${version}_$i',
+            url: currentUrl,
+            filePath: filePath,
+            fileIndex: i,
+            totalUrls: totalUrls,
+            onProgress: onProgress,
+          );
+        } else {
+          // 带重试的 Dio 下载逻辑
+          await _downloadWithDio(
+            url: currentUrl,
+            filePath: filePath,
+            fileIndex: i,
+            totalUrls: totalUrls,
+            onProgress: onProgress,
+          );
+        }
 
         if (i == 0 &&
             expectedSha256 != null &&
@@ -396,6 +435,106 @@ class ModelDownloadManager {
     }
   }
 
+  /// 使用 iOS 后台下载服务下载文件
+  Future<void> _downloadWithBackgroundService({
+    required String downloadId,
+    required String url,
+    required String filePath,
+    required int fileIndex,
+    required int totalUrls,
+    void Function(double progress)? onProgress,
+  }) async {
+    final completer = Completer<void>();
+
+    _backgroundDownloadService.listen(downloadId, (event) {
+      switch (event.status) {
+        case BackgroundDownloadStatus.downloading:
+          final perFileProgress = event.progress;
+          final overallProgress =
+              (fileIndex + perFileProgress) / totalUrls;
+          _downloadProgress[downloadId] = overallProgress;
+          onProgress?.call(overallProgress);
+          break;
+        case BackgroundDownloadStatus.completed:
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+          break;
+        case BackgroundDownloadStatus.error:
+          if (!completer.isCompleted) {
+            completer.completeError(
+              Exception('下载失败: ${event.error ?? "未知错误"}'),
+            );
+          }
+          break;
+        case BackgroundDownloadStatus.cancelled:
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('下载已取消'));
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    await _backgroundDownloadService.startDownload(
+      downloadId: downloadId,
+      url: url,
+      destPath: filePath,
+      headers: {
+        'User-Agent': 'Voices/1.0 (Flutter STT App)',
+        'Accept': '*/*',
+      },
+    );
+
+    await completer.future;
+    _backgroundDownloadService.removeListener(downloadId);
+  }
+
+  /// 使用 Dio 下载文件（带重试）
+  Future<void> _downloadWithDio({
+    required String url,
+    required String filePath,
+    required int fileIndex,
+    required int totalUrls,
+    void Function(double progress)? onProgress,
+  }) async {
+    const maxRetries = 3;
+    for (var attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await _dio.download(
+          url,
+          filePath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              final perFileProgress = received / total;
+              final overallProgress =
+                  (fileIndex + perFileProgress) / totalUrls;
+              _downloadProgress[url] = overallProgress;
+              onProgress?.call(overallProgress);
+            }
+          },
+        );
+        break;
+      } on DioException catch (e) {
+        if (attempt == maxRetries - 1) rethrow;
+
+        if (e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.connectionError) {
+          final incompleteFile = File(filePath);
+          if (await incompleteFile.exists()) {
+            await incompleteFile.delete();
+          }
+          await Future<void>.delayed(Duration(seconds: (attempt + 1) * 2));
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
   /// 保存用户指定的模型目录（支持绝对路径）
   Future<void> setPreferredModelPath(String engineId, String path) async {
     final prefs = await SharedPreferences.getInstance();
@@ -424,15 +563,23 @@ class ModelDownloadManager {
   }
 
   Future<bool> _looksLikeWhisperOnnxDir(Directory dir) async {
-    final encoderInt8 = File('${dir.path}/encoder.int8.onnx');
-    final encoder = File('${dir.path}/encoder.onnx');
-    final decoderInt8 = File('${dir.path}/decoder.int8.onnx');
-    final decoder = File('${dir.path}/decoder.onnx');
-    final tokens = File('${dir.path}/tokens.txt');
+    // Support both tiny-prefixed (HuggingFace) and non-prefixed file names
+    final encoderInt8 = File('${dir.path}/tiny-encoder.int8.onnx');
+    final encoder = File('${dir.path}/tiny-encoder.onnx');
+    final encoderInt8Alt = File('${dir.path}/encoder.int8.onnx');
+    final encoderAlt = File('${dir.path}/encoder.onnx');
+    final decoderInt8 = File('${dir.path}/tiny-decoder.int8.onnx');
+    final decoder = File('${dir.path}/tiny-decoder.onnx');
+    final decoderInt8Alt = File('${dir.path}/decoder.int8.onnx');
+    final decoderAlt = File('${dir.path}/decoder.onnx');
+    final tokens = File('${dir.path}/tiny-tokens.txt');
+    final tokensAlt = File('${dir.path}/tokens.txt');
 
-    final hasEncoder = await encoderInt8.exists() || await encoder.exists();
-    final hasDecoder = await decoderInt8.exists() || await decoder.exists();
-    final hasTokens = await tokens.exists();
+    final hasEncoder = await encoderInt8.exists() || await encoder.exists() ||
+        await encoderInt8Alt.exists() || await encoderAlt.exists();
+    final hasDecoder = await decoderInt8.exists() || await decoder.exists() ||
+        await decoderInt8Alt.exists() || await decoderAlt.exists();
+    final hasTokens = await tokens.exists() || await tokensAlt.exists();
 
     return hasEncoder && hasDecoder && hasTokens;
   }
@@ -688,6 +835,12 @@ class ModelDownloadManager {
 
     for (final candidate in preferredCandidates) {
       if (candidate.trim() == builtinAlias) {
+        // 内置别名（如 'whisper-tiny'、'vosk-cn'）仅在 Android 上
+        // 作为 native assets 路径使用。其他平台需要真实文件系统路径，
+        // 不应直接返回别名，由后续流程解析为实际路径。
+        if (!Platform.isAndroid) {
+          return null;
+        }
         return builtinAlias;
       }
     }

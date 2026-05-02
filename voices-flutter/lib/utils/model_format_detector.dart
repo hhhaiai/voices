@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'platform_utils.dart';
+
 /// 模型格式类型。
 enum ModelFormat {
   /// Whisper GGML 格式（Android whisper.cpp）。
@@ -247,21 +249,22 @@ class ModelFormatDetector {
     // 检查 GGML 格式。
     final ggmlFile = await _findGgmlFile(dir);
     if (ggmlFile != null) {
+      final isGgmlCompatible = !PlatformUtils.usesSherpaOnnx;
       return ModelFormatReport(
         path: ggmlFile.path,
         format: ModelFormat.whisperGgml,
         engineId: 'whisper',
-        isCompatible: Platform.isAndroid,
+        isCompatible: isGgmlCompatible,
         platformCompat:
-            Platform.isAndroid
+            isGgmlCompatible
                 ? PlatformCompatibility.available
                 : PlatformCompatibility.needsConversion,
         issues:
-            Platform.isAndroid
+            isGgmlCompatible
                 ? []
-                : ['GGML 格式仅支持 Android，iOS/macOS 需要 ONNX 格式'],
+                : ['GGML 格式仅支持 Android，其他平台需要 ONNX 格式'],
         suggestions:
-            Platform.isAndroid
+            isGgmlCompatible
                 ? []
                 : [
                     '请下载 sherpa-onnx Whisper ONNX 模型（encoder/decoder/tokens）',
@@ -272,23 +275,24 @@ class ModelFormatDetector {
 
     // 检查 ONNX 格式。
     if (await _isWhisperOnnxDir(dir)) {
+      final isOnnxCompatible = PlatformUtils.usesSherpaOnnx;
       return ModelFormatReport(
         path: dir.path,
         format: ModelFormat.whisperOnnx,
         engineId: 'whisper',
-        isCompatible: !Platform.isAndroid,
+        isCompatible: isOnnxCompatible,
         platformCompat:
-            Platform.isAndroid
-                ? PlatformCompatibility.needsConversion
-                : PlatformCompatibility.available,
+            isOnnxCompatible
+                ? PlatformCompatibility.available
+                : PlatformCompatibility.needsConversion,
         issues:
-            Platform.isAndroid
-                ? ['ONNX 格式仅支持 iOS/macOS，Android 需要 GGML 格式']
-                : [],
+            isOnnxCompatible
+                ? []
+                : ['ONNX 格式不支持 Android，请使用 GGML 格式'],
         suggestions:
-            Platform.isAndroid
-                ? ['请下载 ggml 格式的 Whisper 模型']
-                : [],
+            isOnnxCompatible
+                ? []
+                : ['请下载 ggml 格式的 Whisper 模型'],
       );
     }
 
@@ -326,21 +330,22 @@ class ModelFormatDetector {
     final hasMdl = await File('${dir.path}/am/final.mdl').exists();
 
     if (hasReadme || hasMdl) {
+      final isKaldiCompatible = !PlatformUtils.usesSherpaOnnx;
       return ModelFormatReport(
         path: dir.path,
         format: ModelFormat.voskKaldi,
         engineId: 'vosk',
-        isCompatible: Platform.isAndroid,
+        isCompatible: isKaldiCompatible,
         platformCompat:
-            Platform.isAndroid
+            isKaldiCompatible
                 ? PlatformCompatibility.available
                 : PlatformCompatibility.needsConversion,
         issues:
-            Platform.isAndroid
+            isKaldiCompatible
                 ? []
-                : ['Kaldi 格式仅支持 Android，iOS/macOS 需要 ONNX 格式'],
+                : ['Kaldi 格式仅支持 Android，其他平台需要 ONNX 格式'],
         suggestions:
-            Platform.isAndroid
+            isKaldiCompatible
                 ? []
                 : [
                     '请下载 ONNX 格式的 Vosk/Paraformer 模型',
@@ -351,19 +356,20 @@ class ModelFormatDetector {
 
     // 检查 ONNX 格式。
     if (await _isVoskOnnxDir(dir)) {
+      final isOnnxCompatible = PlatformUtils.usesSherpaOnnx;
       return ModelFormatReport(
         path: dir.path,
         format: ModelFormat.voskOnnx,
         engineId: 'vosk',
-        isCompatible: !Platform.isAndroid,
+        isCompatible: isOnnxCompatible,
         platformCompat:
-            Platform.isAndroid
-                ? PlatformCompatibility.needsConversion
-                : PlatformCompatibility.available,
+            isOnnxCompatible
+                ? PlatformCompatibility.available
+                : PlatformCompatibility.needsConversion,
         issues:
-            Platform.isAndroid
-                ? ['ONNX 格式仅支持 iOS/macOS，Android 需要 Kaldi 格式']
-                : [],
+            isOnnxCompatible
+                ? []
+                : ['ONNX 格式不支持 Android，请使用 Kaldi 格式'],
       );
     }
 

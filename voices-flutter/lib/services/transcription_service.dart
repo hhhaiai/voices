@@ -1,3 +1,4 @@
+import 'dart:io';
 import '../models/audio_input.dart';
 import '../models/engine_definition.dart';
 import '../models/engine_instance.dart';
@@ -54,10 +55,11 @@ class TranscriptionService {
               preferredPath: instance.localPath,
             );
       if (resolvedPath == null) {
-        throw Exception(
-          '未找到 ${instance.engineId} 模型目录。请在设置页配置模型路径，'
-          '或放到 app 文档目录/models/<engineId>。',
-        );
+        final isApple = Platform.isIOS || Platform.isMacOS;
+        final hint = isApple
+            ? '请在设置页面下载模型，或切换到 SenseVoice（内置可用）。'
+            : '请在设置页配置模型路径，或放到 app 文档目录/models/${instance.engineId}。';
+        throw Exception('未找到 ${instance.engineId} 模型。$hint');
       }
 
       if (_state == TranscriptionServiceState.ready &&

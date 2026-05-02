@@ -149,6 +149,6 @@ class AppleSpeechBackend implements EngineBackend {
   void dispose() {
     _latencyTracker.reset();
     _partialResultController.close();
-    unload();
+    // unload() 由调用方 TranscriptionService.unloadEngine() 负责 await
   }
 }

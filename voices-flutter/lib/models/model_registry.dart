@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../utils/platform_utils.dart';
 
 class DownloadableModelDefinition {
   final String id;
@@ -14,6 +14,8 @@ class DownloadableModelDefinition {
   final bool android;
   final bool ios;
   final bool macos;
+  final bool linux;
+  final bool windows;
 
   const DownloadableModelDefinition({
     required this.id,
@@ -29,13 +31,20 @@ class DownloadableModelDefinition {
     this.android = true,
     this.ios = true,
     this.macos = true,
+    this.linux = false,
+    this.windows = false,
   });
 
   bool get supportsCurrentPlatform {
-    if (Platform.isAndroid) return android;
-    if (Platform.isIOS) return ios;
-    if (Platform.isMacOS) return macos;
-    return false;
+    final platform = PlatformUtils.currentPlatform;
+    switch (platform) {
+      case 'android': return android;
+      case 'ios': return ios;
+      case 'macos': return macos;
+      case 'linux': return linux;
+      case 'windows': return windows;
+      default: return false;
+    }
   }
 }
 
@@ -51,6 +60,8 @@ class BuiltinModelDefinition {
   final bool android;
   final bool ios;
   final bool macos;
+  final bool linux;
+  final bool windows;
 
   const BuiltinModelDefinition({
     required this.id,
@@ -64,13 +75,20 @@ class BuiltinModelDefinition {
     this.android = true,
     this.ios = true,
     this.macos = true,
+    this.linux = false,
+    this.windows = false,
   });
 
   bool get supportsCurrentPlatform {
-    if (Platform.isAndroid) return android;
-    if (Platform.isIOS) return ios;
-    if (Platform.isMacOS) return macos;
-    return false;
+    final platform = PlatformUtils.currentPlatform;
+    switch (platform) {
+      case 'android': return android;
+      case 'ios': return ios;
+      case 'macos': return macos;
+      case 'linux': return linux;
+      case 'windows': return windows;
+      default: return false;
+    }
   }
 }
 
@@ -123,16 +141,18 @@ class ModelRegistry {
       name: 'Whisper Tiny (ONNX, sherpa)',
       version: 'onnx-1.0.0',
       downloadUrl:
-          'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/encoder.int8.onnx',
+          'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-encoder.int8.onnx',
       extraDownloadUrls: [
-        'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/decoder.int8.onnx',
-        'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tokens.txt',
+        'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-decoder.int8.onnx',
+        'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-tokens.txt',
       ],
       sizeMB: 74,
-      notes: ['iOS/macOS 推荐', '下载 encoder/decoder/tokens 三个文件'],
+      notes: ['非 Android 平台推荐', '下载 encoder/decoder/tokens 三个文件'],
       android: false,
       ios: true,
       macos: true,
+      linux: true,
+      windows: true,
     ),
     DownloadableModelDefinition(
       id: 'vosk-paraformer-zh-small-onnx',
@@ -145,10 +165,12 @@ class ModelRegistry {
         'https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-small-2024-03-09/resolve/main/tokens.txt',
       ],
       sizeMB: 24,
-      notes: ['iOS/macOS 推荐', '下载 model/tokens 两个文件'],
+      notes: ['非 Android 平台推荐', '下载 model/tokens 两个文件'],
       android: false,
       ios: true,
       macos: true,
+      linux: true,
+      windows: true,
     ),
     DownloadableModelDefinition(
       id: 'sensevoice-onnx-int8',
@@ -165,6 +187,8 @@ class ModelRegistry {
       android: true,
       ios: true,
       macos: true,
+      linux: true,
+      windows: true,
     ),
   ];
 
@@ -219,6 +243,8 @@ class ModelRegistry {
       android: true,
       ios: true,
       macos: true,
+      linux: true,
+      windows: true,
     ),
   ];
 

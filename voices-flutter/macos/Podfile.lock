@@ -36,6 +36,6 @@ SPEC CHECKSUMS:
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sherpa_onnx_macos: cf769bba0584902f441fdf388a3feb88f3f6f988
 
-PODFILE CHECKSUM: c4dda72bffbbf606876d102a78d4d3a0e4c9b017
+PODFILE CHECKSUM: ba845a7a65fdaff090a632b1b7063d1db34b29e3
 
 COCOAPODS: 1.16.2

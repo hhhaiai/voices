@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'model_format_detector.dart';
+import 'platform_utils.dart';
 import 'sensevoice_metadata_fixer.dart';
 
 /// 格式适配结果。
@@ -123,15 +124,15 @@ class ModelFormatAdapter {
         return _downloadWhisperCompatibleFormat(report, onProgress: onProgress);
 
       case ModelFormat.whisperGgml:
-        // GGML 格式但当前平台不支持（iOS/macOS）：下载 ONNX 版本。
-        if (Platform.isIOS || Platform.isMacOS) {
+        // GGML 格式但当前平台不支持（非 Android）：下载 ONNX 版本。
+        if (PlatformUtils.usesSherpaOnnx) {
           return _downloadWhisperOnnx(report, onProgress: onProgress);
         }
         return AdaptResult.fail('GGML 格式在当前平台不可用');
 
       case ModelFormat.whisperOnnx:
         // ONNX 格式但当前平台不支持（Android）：下载 GGML 版本。
-        if (Platform.isAndroid) {
+        if (!PlatformUtils.usesSherpaOnnx) {
           return _downloadWhisperGgml(report, onProgress: onProgress);
         }
         return AdaptResult.fail('ONNX 格式在当前平台不可用');
@@ -148,15 +149,15 @@ class ModelFormatAdapter {
   }) async {
     switch (report.format) {
       case ModelFormat.voskKaldi:
-        // Kaldi 格式但当前平台不支持（iOS/macOS）：下载 Paraformer ONNX。
-        if (Platform.isIOS || Platform.isMacOS) {
+        // Kaldi 格式但当前平台不支持（非 Android）：下载 Paraformer ONNX。
+        if (PlatformUtils.usesSherpaOnnx) {
           return _downloadVoskParaformer(report, onProgress: onProgress);
         }
         return AdaptResult.fail('Kaldi 格式在当前平台不可用');
 
       case ModelFormat.voskOnnx:
         // ONNX 格式但当前平台不支持（Android）。
-        if (Platform.isAndroid) {
+        if (!PlatformUtils.usesSherpaOnnx) {
           return AdaptResult.fail(
             'Android Vosk 需要 Kaldi 格式，请下载 vosk-model-small-cn',
           );
@@ -204,7 +205,7 @@ class ModelFormatAdapter {
     ModelFormatReport report, {
     void Function(double progress)? onProgress,
   }) async {
-    if (Platform.isAndroid) {
+    if (!PlatformUtils.usesSherpaOnnx) {
       return _downloadWhisperGgml(report, onProgress: onProgress);
     } else {
       return _downloadWhisperOnnx(report, onProgress: onProgress);

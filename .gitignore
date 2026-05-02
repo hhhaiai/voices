@@ -1,6 +1,9 @@
 # Local reference repo (do not commit)
 dicta/
 
+# Reference docs and analysis
+voices-flutter/docs/
+
 # Model files (large binaries, downloaded at runtime)
 /models/
 

@@ -310,16 +310,23 @@ class SherpaWhisperService {
 
   Future<_WhisperModelPaths?> _resolveWhisperModelPaths(Directory modelDir) async {
     final encoder = await _pickFirstExistingFile(modelDir, const [
+      'tiny-encoder.int8.onnx',
+      'tiny-encoder.onnx',
       'encoder.int8.onnx',
       'encoder.onnx',
     ]);
     final decoder = await _pickFirstExistingFile(modelDir, const [
+      'tiny-decoder.int8.onnx',
+      'tiny-decoder.onnx',
       'decoder.int8.onnx',
       'decoder.onnx',
     ]);
-    final tokens = File('${modelDir.path}/tokens.txt');
+    final tokens = await _pickFirstExistingFile(modelDir, const [
+      'tiny-tokens.txt',
+      'tokens.txt',
+    ]);
 
-    if (encoder == null || decoder == null || !await tokens.exists()) {
+    if (encoder == null || decoder == null || tokens == null) {
       return null;
     }
 

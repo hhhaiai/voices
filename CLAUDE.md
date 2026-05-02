@@ -533,3 +533,35 @@ Future<void> unloadEngine() async {
 - `flutter test`：84 个测试全部通过
 - `flutter build apk --debug`：通过
 - `flutter build ios --simulator --no-codesign`：通过
+
+## 本轮更新（2026-05-02）
+
+### 全平台兼容升级：Linux/Windows 支持
+
+**目标**：修复硬编码的 Android/iOS/macOS 平台假设，使 Linux/Windows 桌面端可编译运行。
+
+**平台×引擎矩阵（扩展后）**：
+
+| 引擎 | Android | iOS | macOS | Linux | Windows |
+|------|---------|-----|-------|-------|---------|
+| Whisper | MethodChannel (ggml) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) |
+| Vosk | MethodChannel (Kaldi) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) |
+| SenseVoice | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) | sherpa_onnx (ONNX) |
+| Apple Speech | N/A | SFSpeechRecognizer | SFSpeechRecognizer | N/A | N/A |
+
+**变更范围**：
+
+1. `lib/models/model_registry.dart`：`DownloadableModelDefinition` 和 `BuiltinModelDefinition` 添加 `linux`/`windows` 字段；ONNX 模型启用 linux/windows 支持
+2. `lib/services/sensevoice_onnx_service.dart`：将 Android-only 路径（`/storage/emulated/0/...`）和 `getExternalStorageDirectory()` 包裹在 `Platform.isAndroid` 检查中
+3. `lib/screens/settings_screen.dart`：`_recommendedModelDir()` 添加 Linux/Windows 分支；`_modelUsageHint()` 将 `Platform.isIOS || Platform.isMacOS` 改为 `!Platform.isAndroid`
+4. `lib/utils/model_format_adapter.dart`：Whisper GGML 和 Vosk Kaldi 适配条件从 `Platform.isIOS || Platform.isMacOS` 改为 `!Platform.isAndroid`
+5. `lib/utils/model_format_detector.dart`：错误消息从 "iOS/macOS" 改为 "其他平台"
+6. `lib/models/engine_config.dart`：三个配置类的 `fromMap()` numThreads 默认值从 2 修正为 4（与构造函数一致）
+7. `lib/screens/home_screen.dart`：文案平台感知，桌面端去掉 "手机" 字样
+
+**验证**：
+- `flutter analyze`：无错误
+- `flutter test`：84 个测试全部通过
+- `flutter build macos`：通过（129.9MB）
+- `flutter build linux`：需 Linux 主机验证（macOS 上无法构建）
+- `flutter build windows`：需 Windows 主机验证

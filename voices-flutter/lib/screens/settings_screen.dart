@@ -7,6 +7,7 @@ import '../models/engine_instance.dart';
 import '../models/model_registry.dart';
 import '../providers/providers.dart';
 import '../services/model_download_manager.dart';
+import '../utils/platform_utils.dart';
 
 /// 设置屏幕（仅本地模型）
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -46,8 +47,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '当前仅使用手机本地模型进行转写，不调用任何外部服务。',
+                  Text(
+                    Platform.isAndroid || Platform.isIOS
+                        ? '当前仅使用手机本地模型进行转写，不调用任何外部服务。'
+                        : '当前仅使用本地模型进行转写，不调用外部服务。',
                   ),
                 ],
               ),
@@ -892,7 +895,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool _isEngineSupportedOnCurrentPlatform(String engineId) {
     if (engineId == 'apple_speech') {
-      return Platform.isIOS || Platform.isMacOS;
+      return PlatformUtils.supportsAppleSpeech;
     }
     return true;
   }
@@ -1009,6 +1012,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (text.contains('SocketException') || text.contains('TimeoutException')) {
       return '网络连接失败或超时，请稍后重试';
     }
+    if (text.contains('Connection refused') || text.contains('connection refused')) {
+      return '连接被拒绝，请检查网络设置';
+    }
+    if (text.contains('403') || text.contains('Forbidden')) {
+      return '服务器拒绝访问，请稍后重试';
+    }
+    if (text.contains('404') || text.contains('Not Found')) {
+      return '模型文件不存在，请检查下载地址';
+    }
+    if (text.contains('429') || text.contains('Too Many Requests')) {
+      return '请求过于频繁，请稍后重试';
+    }
+    if (text.contains('500') || text.contains('502') || text.contains('503')) {
+      return '服务器暂时不可用，请稍后重试';
+    }
+    if (text.contains('RedirectException') || text.contains('redirect')) {
+      return '下载链接重定向失败，请检查网络';
+    }
     return '操作失败，请重试';
   }
 
@@ -1034,10 +1055,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (engineId == 'sensevoice_onnx') {
       return '点按选择并加载；长按可设置自定义路径（目录需包含 model_sherpa.onnx/model_quant.onnx/model.onnx 与 tokens）';
     }
-    if (engineId == 'whisper' && (Platform.isIOS || Platform.isMacOS)) {
+    if (engineId == 'whisper' && PlatformUtils.usesSherpaOnnx) {
       return '点按选择并加载；长按可设置自定义路径（目录需包含 encoder/decoder ONNX 与 tokens.txt）';
     }
-    if (engineId == 'vosk' && (Platform.isIOS || Platform.isMacOS)) {
+    if (engineId == 'vosk' && PlatformUtils.usesSherpaOnnx) {
       return '点按选择并加载；长按可设置自定义路径（目录需包含 model.onnx 或 encoder/decoder/joiner 与 tokens.txt）';
     }
     return '点按选择并加载；长按可设置自定义路径';
@@ -1054,13 +1075,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String _recommendedModelDir(String engineId) {
-    if (engineId == 'whisper' && (Platform.isIOS || Platform.isMacOS)) {
-      return '${Directory.systemTemp.path}/whisper-onnx';
-    }
-    if (engineId == 'vosk' && (Platform.isIOS || Platform.isMacOS)) {
-      return '${Directory.systemTemp.path}/vosk-onnx';
+    if (PlatformUtils.usesSherpaOnnx) {
+      // iOS/macOS/Linux/Windows 使用 ONNX 格式
+      return '${Directory.systemTemp.path}/voices/models/$engineId';
     }
 
+    // Android 使用 GGML/Kaldi 格式
     switch (engineId) {
       case 'sensevoice_onnx':
         return '/storage/emulated/0/Android/data/com.sanbo.voices/files/models/sensevoice-onnx';

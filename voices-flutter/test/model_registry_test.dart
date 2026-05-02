@@ -95,9 +95,9 @@ void main() {
 
       expect(model.engineId, 'whisper');
       expect(model.extraDownloadUrls.length, 2);
-      expect(model.extraDownloadUrls.any((u) => u.endsWith('/decoder.int8.onnx')),
+      expect(model.extraDownloadUrls.any((u) => u.endsWith('/tiny-decoder.int8.onnx')),
           isTrue);
-      expect(model.extraDownloadUrls.any((u) => u.endsWith('/tokens.txt')),
+      expect(model.extraDownloadUrls.any((u) => u.endsWith('/tiny-tokens.txt')),
           isTrue);
     });
 

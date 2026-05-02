@@ -139,6 +139,6 @@ class SenseVoiceBackend implements EngineBackend {
   @override
   void dispose() {
     _latencyTracker.reset();
-    unload();
+    // unload() 由调用方 TranscriptionService.unloadEngine() 负责 await
   }
 }

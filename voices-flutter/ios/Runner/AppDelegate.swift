@@ -7,18 +7,19 @@ import AVFoundation
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
     private var eventSink: FlutterEventSink?
     private let appleSpeechBridge = AppleSpeechBridge.shared
+    private let backgroundDownloadManager = BackgroundDownloadManager()
 
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         if let controller = window?.rootViewController as? FlutterViewController {
+            // Apple Speech 通道
             let channel = FlutterMethodChannel(
                 name: "com.sanbo.voices/apple_speech",
                 binaryMessenger: controller.binaryMessenger
             )
 
-            // 设置 EventChannel 用于推送 partial results
             let eventChannel = FlutterEventChannel(
                 name: "com.sanbo.voices/apple_speech_events",
                 binaryMessenger: controller.binaryMessenger
@@ -39,9 +40,92 @@ import AVFoundation
                     result(FlutterMethodNotImplemented)
                 }
             }
+
+            // 后台下载通道
+            let downloadChannel = FlutterMethodChannel(
+                name: "com.sanbo.voices/background_download",
+                binaryMessenger: controller.binaryMessenger
+            )
+
+            let downloadEventChannel = FlutterEventChannel(
+                name: "com.sanbo.voices/background_download_events",
+                binaryMessenger: controller.binaryMessenger
+            )
+            downloadEventChannel.setStreamHandler(DownloadEventStreamHandler(manager: backgroundDownloadManager))
+
+            downloadChannel.setMethodCallHandler { [weak self] call, result in
+                guard let self = self else { return }
+
+                switch call.method {
+                case "startDownload":
+                    self.handleStartDownload(call: call, result: result)
+                case "cancelDownload":
+                    self.handleCancelDownload(call: call, result: result)
+                case "getDownloadStatus":
+                    self.handleGetDownloadStatus(call: call, result: result)
+                default:
+                    result(FlutterMethodNotImplemented)
+                }
+            }
         }
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
+    // MARK: - Background Download Completion
+
+    func completeBackgroundDownload() {
+        // 系统后台下载完成回调
+        // 可以在这里发送本地通知
+    }
+
+    // MARK: - Background Download Handlers
+
+    private func handleStartDownload(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard
+            let args = call.arguments as? [String: Any],
+            let urlString = args["url"] as? String,
+            let destPath = args["destPath"] as? String,
+            let downloadId = args["downloadId"] as? String
+        else {
+            result(FlutterError(code: "bad_args", message: "缺少 url/destPath/downloadId", details: nil))
+            return
+        }
+
+        let headers = args["headers"] as? [String: String] ?? [:]
+        backgroundDownloadManager.startDownload(
+            id: downloadId,
+            url: urlString,
+            destPath: destPath,
+            headers: headers
+        )
+        result(nil)
+    }
+
+    private func handleCancelDownload(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard
+            let args = call.arguments as? [String: Any],
+            let downloadId = args["downloadId"] as? String
+        else {
+            result(FlutterError(code: "bad_args", message: "缺少 downloadId", details: nil))
+            return
+        }
+
+        backgroundDownloadManager.cancelDownload(id: downloadId)
+        result(nil)
+    }
+
+    private func handleGetDownloadStatus(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard
+            let args = call.arguments as? [String: Any],
+            let downloadId = args["downloadId"] as? String
+        else {
+            result(FlutterError(code: "bad_args", message: "缺少 downloadId", details: nil))
+            return
+        }
+
+        let status = backgroundDownloadManager.getDownloadStatus(id: downloadId)
+        result(status)
     }
 
     private func handleTranscribeFile(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -284,5 +368,173 @@ final class AppleSpeechBridge {
         audioEngine = nil
         recognitionRequest = nil
         recognitionTask = nil
+    }
+}
+
+// MARK: - Background Download Manager
+
+final class BackgroundDownloadManager: NSObject {
+    private var session: URLSession!
+    private var activeDownloads: [String: URLSessionDownloadTask] = [:]
+    private var downloadCallbacks: [String: (Double) -> Void] = [:]
+    private var destPaths: [String: String] = [:]
+    private var eventSink: FlutterEventSink?
+
+    override init() {
+        super.init()
+        let config = URLSessionConfiguration.background(withIdentifier: "com.sanbo.voices.download")
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForResource = 3600 // 1 hour
+        config.httpMaximumConnectionsPerHost = 3
+        session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+    }
+
+    func setEventSink(_ sink: FlutterEventSink?) {
+        self.eventSink = sink
+    }
+
+    func startDownload(id: String, url: String, destPath: String, headers: [String: String]) {
+        // 取消已有的下载
+        cancelDownload(id: id)
+
+        guard let downloadURL = URL(string: url) else {
+            sendEvent(id: id, status: "error", progress: 0, error: "无效的下载地址")
+            return
+        }
+
+        var request = URLRequest(url: downloadURL)
+        request.setValue("Voices/1.0 (Flutter STT App)", forHTTPHeaderField: "User-Agent")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let task = session.downloadTask(with: request)
+        task.taskDescription = id
+        activeDownloads[id] = task
+        destPaths[id] = destPath
+
+        sendEvent(id: id, status: "started", progress: 0, error: nil)
+        task.resume()
+    }
+
+    func cancelDownload(id: String) {
+        activeDownloads[id]?.cancel()
+        activeDownloads.removeValue(forKey: id)
+        destPaths.removeValue(forKey: id)
+        sendEvent(id: id, status: "cancelled", progress: 0, error: nil)
+    }
+
+    func getDownloadStatus(id: String) -> [String: Any] {
+        if let task = activeDownloads[id] {
+            let progress = task.progress
+            return [
+                "id": id,
+                "status": "downloading",
+                "progress": Double(progress.fractionCompleted),
+                "totalBytes": progress.totalUnitCount,
+                "receivedBytes": progress.completedUnitCount,
+            ]
+        }
+        return ["id": id, "status": "idle", "progress": 0.0]
+    }
+
+    private func sendEvent(id: String, status: String, progress: Double, error: String?) {
+        var event: [String: Any] = [
+            "id": id,
+            "status": status,
+            "progress": progress,
+        ]
+        if let error = error {
+            event["error"] = error
+        }
+        eventSink?(event)
+    }
+}
+
+extension BackgroundDownloadManager: URLSessionDownloadDelegate {
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let id = downloadTask.taskDescription else { return }
+
+        let destPath = destPaths[id] ?? ""
+        let destURL = URL(fileURLWithPath: destPath)
+
+        do {
+            // 确保目标目录存在
+            let destDir = destURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+            // 如果目标文件已存在，先删除
+            if FileManager.default.fileExists(atPath: destPath) {
+                try FileManager.default.removeItem(at: destURL)
+            }
+
+            // 移动下载文件到目标位置
+            try FileManager.default.moveItem(at: location, to: destURL)
+
+            sendEvent(id: id, status: "completed", progress: 1.0, error: nil)
+        } catch {
+            sendEvent(id: id, status: "error", progress: 0, error: error.localizedDescription)
+        }
+
+        activeDownloads.removeValue(forKey: id)
+        destPaths.removeValue(forKey: id)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard let id = downloadTask.taskDescription else { return }
+
+        let progress = totalBytesExpectedToWrite > 0
+            ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            : 0
+
+        sendEvent(id: id, status: "downloading", progress: progress, error: nil)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let id = task.taskDescription, let error = error else { return }
+
+        let nsError = error as NSError
+        // 忽略取消错误
+        if nsError.code == NSURLErrorCancelled {
+            return
+        }
+
+        sendEvent(id: id, status: "error", progress: 0, error: error.localizedDescription)
+        activeDownloads.removeValue(forKey: id)
+        destPaths.removeValue(forKey: id)
+    }
+}
+
+extension BackgroundDownloadManager: URLSessionDelegate {
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        // 后台下载完成，通知系统可以释放资源
+        DispatchQueue.main.async {
+            if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
+                appDelegate.completeBackgroundDownload()
+            }
+        }
+    }
+}
+
+// MARK: - Download Event Stream Handler
+
+class DownloadEventStreamHandler: NSObject, FlutterStreamHandler {
+    private weak var manager: BackgroundDownloadManager?
+
+    init(manager: BackgroundDownloadManager) {
+        self.manager = manager
+    }
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        manager?.setEventSink(events)
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        manager?.setEventSink(nil)
+        return nil
     }
 }

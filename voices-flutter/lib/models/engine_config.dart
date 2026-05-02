@@ -48,7 +48,7 @@ class WhisperConfig {
       language: map['language'] as String? ?? 'auto',
       task: map['task'] as String? ?? 'transcribe',
       tailPaddings: map['tailPaddings'] as int? ?? -1,
-      numThreads: map['numThreads'] as int? ?? 2,
+      numThreads: map['numThreads'] as int? ?? 4,
       provider: map['provider'] as String? ?? 'cpu',
       debug: map['debug'] as bool? ?? false,
     );
@@ -101,7 +101,7 @@ class SenseVoiceConfig {
       language: map['language'] as String? ?? 'auto',
       useInverseTextNormalization:
           map['useInverseTextNormalization'] as bool? ?? true,
-      numThreads: map['numThreads'] as int? ?? 2,
+      numThreads: map['numThreads'] as int? ?? 4,
       provider: map['provider'] as String? ?? 'cpu',
       debug: map['debug'] as bool? ?? false,
     );
@@ -140,7 +140,7 @@ class VoskConfig {
 
   static VoskConfig fromMap(Map<String, dynamic> map) {
     return VoskConfig(
-      numThreads: map['numThreads'] as int? ?? 2,
+      numThreads: map['numThreads'] as int? ?? 4,
       provider: map['provider'] as String? ?? 'cpu',
       debug: map['debug'] as bool? ?? false,
     );

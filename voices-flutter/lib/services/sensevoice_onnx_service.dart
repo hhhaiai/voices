@@ -343,19 +343,23 @@ class SenseVoiceOnnxService {
       }
     }
 
-    final fallbackDirs = <Directory>[
-      Directory('/storage/emulated/0/Android/data/com.sanbo.voices/files/models/sensevoice-onnx'),
-      Directory('/storage/emulated/0/Android/data/com.sanbo.voices/files/models/sensevoice_onnx'),
-    ];
+    final fallbackDirs = <Directory>[];
+
+    if (Platform.isAndroid) {
+      fallbackDirs.add(Directory('/storage/emulated/0/Android/data/com.sanbo.voices/files/models/sensevoice-onnx'));
+      fallbackDirs.add(Directory('/storage/emulated/0/Android/data/com.sanbo.voices/files/models/sensevoice_onnx'));
+    }
 
     final docsDir = await getApplicationDocumentsDirectory();
     fallbackDirs.add(Directory('${docsDir.path}/models/sensevoice-onnx'));
     fallbackDirs.add(Directory('${docsDir.path}/models/sensevoice_onnx'));
 
-    final extDir = await getExternalStorageDirectory();
-    if (extDir != null) {
-      fallbackDirs.add(Directory('${extDir.path}/models/sensevoice-onnx'));
-      fallbackDirs.add(Directory('${extDir.path}/models/sensevoice_onnx'));
+    if (Platform.isAndroid) {
+      final extDir = await getExternalStorageDirectory();
+      if (extDir != null) {
+        fallbackDirs.add(Directory('${extDir.path}/models/sensevoice-onnx'));
+        fallbackDirs.add(Directory('${extDir.path}/models/sensevoice_onnx'));
+      }
     }
 
     for (final d in fallbackDirs) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/engine_definition.dart';
 import '../models/engine_instance.dart';
@@ -237,34 +239,69 @@ class ActiveInstanceNotifier extends StateNotifier<EngineInstance?> {
   }
 
   Future<void> _initializeBuiltinEngines() async {
-    await _manager.loadInstances();
+    try {
+      await _manager.loadInstances();
 
-    // 获取已有的活跃实例
-    var activeInstance = _manager.getActiveInstance();
+      // 获取已有的活跃实例
+      var activeInstance = _manager.getActiveInstance();
 
-    if (activeInstance == null) {
-      // 默认优先 Whisper tiny，Phase 1 先打通该链路。
-      const engineDef = EngineDefinition(
-        id: 'whisper',
-        name: 'Whisper Tiny',
-        description: '离线高精度语音识别模型',
-        category: EngineCategory.offline,
-        version: '1.0.0',
-        languages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de'],
-        isFree: true,
-        sizeMB: 75,
-      );
-      activeInstance = await _manager.createInstance(engine: engineDef);
-      await _manager.updateInstanceState(
-        activeInstance.id,
-        version: engineDef.version,
-        state: EngineInstanceState.downloaded,
-        localPath: 'whisper-tiny',
-      );
-      await _manager.setActiveInstance(activeInstance.id);
+      // 迁移检查：如果当前引擎在当前平台没有内置模型，
+      // 且没有已下载的模型，自动切换到平台默认引擎
+      if (activeInstance != null) {
+        final builtin = ModelRegistry.preferredBuiltinForEngine(
+          activeInstance.engineId,
+        );
+        if (builtin == null) {
+          final modelManager = ModelDownloadManager();
+          final resolvedPath = await modelManager.resolveModelPath(
+            activeInstance.engineId,
+          );
+          if (resolvedPath == null) {
+            // 没有可用模型，清除旧实例，重新创建平台默认
+            await _manager.deleteInstance(activeInstance.id);
+            activeInstance = null;
+          }
+        }
+      }
+
+      if (activeInstance == null) {
+        // 根据平台选择默认引擎：
+        // - Android: Whisper（内置 GGML 模型，通过 native assets 加载）
+        // - 其他平台: SenseVoice ONNX（内置 ONNX 模型，全平台可用）
+        final isAndroid = Platform.isAndroid;
+        final defaultEngineId = isAndroid ? 'whisper' : 'sensevoice_onnx';
+
+        final engineDef = EngineDefinition(
+          id: defaultEngineId,
+          name: isAndroid ? 'Whisper Tiny' : 'SenseVoice ONNX',
+          description: isAndroid
+              ? '离线高精度语音识别模型'
+              : 'SenseVoice 多语言语音识别模型（内置）',
+          category: EngineCategory.offline,
+          version: '1.0.0',
+          languages: isAndroid
+              ? ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de']
+              : ['zh', 'en', 'ja', 'ko', 'yue'],
+          isFree: true,
+          sizeMB: isAndroid ? 75 : 230,
+        );
+
+        activeInstance = await _manager.createInstance(engine: engineDef);
+        await _manager.updateInstanceState(
+          activeInstance.id,
+          version: engineDef.version,
+          state: EngineInstanceState.downloaded,
+          // Android whisper 使用 asset 别名，其他平台由 ModelDownloadManager 解析内置模型
+          localPath: isAndroid ? 'whisper-tiny' : null,
+        );
+        await _manager.setActiveInstance(activeInstance.id);
+      }
+
+      state = _manager.getActiveInstance();
+    } catch (e) {
+      // 初始化失败不阻塞 UI，用户可在设置页手动选择引擎
+      state = _manager.getActiveInstance();
     }
-
-    state = _manager.getActiveInstance();
   }
 
   Future<void> setActiveInstance(EngineInstance instance) async {
@@ -282,7 +319,11 @@ class ActiveInstanceNotifier extends StateNotifier<EngineInstance?> {
         state = previous;
         await transcriptionService.loadEngine(previous);
       }
-      throw Exception(transcriptionService.errorMessage ?? '模型加载失败');
+      // 没有 previous 时（首次启动），保留当前实例但不抛异常，
+      // 用户可在设置页下载模型后重试
+      if (previous != null) {
+        throw Exception(transcriptionService.errorMessage ?? '模型加载失败');
+      }
     }
   }
 }

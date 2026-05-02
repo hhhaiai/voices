@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +69,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _lastAutoLoadedInstanceId = activeInstance.id;
     if (!mounted) return;
     setState(() {});
+
+    // 引擎加载失败时提示用户下载模型
+    if (_transcriptionService.state == TranscriptionServiceState.error) {
+      final msg = _transcriptionService.errorMessage ?? '';
+      if (msg.contains('未找到') || msg.contains('模型')) {
+        _showSnack('请在设置页面下载模型后使用');
+      }
+    }
   }
 
   Future<void> _autoLoadEngineIfNeeded(EngineInstance? activeInstance) async {
@@ -428,7 +437,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '当前仅使用手机本地模型进行转写，不调用外部服务。',
+            (Platform.isAndroid || Platform.isIOS)
+                ? '当前仅使用手机本地模型进行转写，不调用外部服务。'
+                : '当前仅使用本地模型进行转写，不调用外部服务。',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
