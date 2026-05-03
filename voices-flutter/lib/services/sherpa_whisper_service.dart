@@ -45,12 +45,16 @@ class SherpaWhisperService {
 
     _ensureBindings();
 
+    // Sherpa ONNX 不支持 "auto"，用空字符串触发自动检测
+    final effectiveLanguage =
+        _config.language == 'auto' ? '' : _config.language;
+
     final config = sherpa_onnx.OfflineRecognizerConfig(
       model: sherpa_onnx.OfflineModelConfig(
         whisper: sherpa_onnx.OfflineWhisperModelConfig(
           encoder: modelPaths.encoder,
           decoder: modelPaths.decoder,
-          language: _config.language,
+          language: effectiveLanguage,
           task: _config.task,
           tailPaddings: _config.tailPaddings,
         ),
