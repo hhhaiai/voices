@@ -565,3 +565,260 @@ Future<void> unloadEngine() async {
 - `flutter build macos`：通过（129.9MB）
 - `flutter build linux`：需 Linux 主机验证（macOS 上无法构建）
 - `flutter build windows`：需 Windows 主机验证
+
+---
+
+## 14. 本地 AI 能力扩展计划（2026-05-04）
+
+### 目标
+
+将 voices-flutter 从单一语音转文字应用，扩展为**移动端本地 AI 综合能力平台**，支持：
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| 语音转文字（ASR） | 已有 | Whisper/Vosk/SenseVoice |
+| 实时语音转文字 | 已有 | Whisper/Vosk/SenseVoice |
+| 文字转语音（TTS） | 已有 | sherpa-onnx VITS/Kokoro |
+| 本地 LLM 对话 | 已有 | llama_cpp_dart (GGUF) |
+| 文字翻译 | 已有 | LLM (本地 GGUF) |
+| 图像理解（多模态） | 已有 | llama.cpp LLaVA (GGUF) |
+
+### 核心决策
+
+1. **模型格式**：ONNX + GGUF 双格式支持
+2. **模块化设计**：封装为 SDK 风格，便于未来迁移复用
+3. **体积控制**：尽量 1GB 以内，通过提示词工程和反思机制保证小模型稳定性
+4. **下载策略**：按需下载，设置页面管理
+
+### 技术方案
+
+#### TTS（文字转语音）
+
+| 模型 | 大小 | 格式 | 中文 | 推荐 |
+|------|------|------|------|------|
+| Kokoro-82M-zh | ~100MB (Q4) | Original/MLX | ✅ | ⭐⭐⭐⭐⭐ |
+| vits-melo-tts-zh_en | ~150MB | ONNX | ✅ | ⭐⭐⭐⭐ |
+| MOSS-TTS-Nano-100M | ~400MB | ONNX | ✅ | ⭐⭐⭐ |
+
+**推荐方案**：sherpa-onnx（与现有技术栈一致）+ Kokoro（TTS 质量好）
+
+#### 本地 LLM（GGUF 量化）
+
+| 模型 | 原始大小 | Q4_K_M 大小 | 特点 |
+|------|----------|-------------|------|
+| SmolLM-0.4B | ~800MB | ~200MB | 最小，最快 |
+| Qwen2-0.5B | ~1GB | ~300MB | 中英双语好 |
+| Gemma-2B | ~2GB | ~1.2GB | Google 质量好 |
+| Phi-3-mini | ~4GB | ~2GB | Microsoft 质量高 |
+| Llama-3.2-1B | ~2GB | ~600MB | Meta 均衡 |
+
+**推荐方案**：llama_cpp_dart（Flutter GGUF 绑定）
+
+#### 语音翻译
+
+使用 Whisper 模型直接进行语音翻译，支持：
+- 中英翻译
+- 中日翻译
+- 中韩翻译
+
+#### 多模态（图像理解）
+
+| 模型 | 大小 | 说明 |
+|------|------|------|
+| LLaVA-Phi-3-mini | ~4B (Q4: 2-3GB) | 最小多模态，支持图像问答 |
+| EraX-VL-2B | ~2B (Q4: ~1GB) | 轻量多模态 |
+
+**确认**：接受 2-3GB 多模态模型
+
+### 架构设计
+
+```
+lib/
+├── engines/
+│   ├── base/
+│   │   ├── asr_backend.dart      # 语音识别基类（现有）
+│   │   ├── tts_backend.dart      # 语音合成基类（新增）
+│   │   ├── llm_backend.dart      # LLM 对话基类（新增）
+│   │   └── vision_backend.dart    # 多模态基类（新增）
+│   │
+│   ├── asr/                      # 语音识别模块（现有）
+│   │   └── sherpa_asr_backend.dart
+│   │
+│   ├── tts/                      # 语音合成模块（新增）
+│   │   ├── sherpa_tts_backend.dart   # sherpa-onnx VITS
+│   │   └── kokoro_tts_backend.dart   # Kokoro
+│   │
+│   ├── llm/                      # LLM 对话模块（新增）
+│   │   ├── gguf_llm_backend.dart     # GGUF 格式 (llama.cpp)
+│   │   └── onnx_llm_backend.dart     # ONNX 格式（备选）
+│   │
+│   ├── vision/                   # 多模态模块（可选）
+│   │   └── llava_backend.dart
+│   │
+│   └── translation/              # 翻译模块（新增）
+│       └── whisper_translation_backend.dart
+│
+├── services/
+│   ├── asr_service.dart          # 语音识别服务（现有）
+│   ├── tts_service.dart          # 语音合成服务（新增）
+│   ├── llm_service.dart         # LLM 对话服务（新增）
+│   ├── vision_service.dart       # 多模态服务（新增）
+│   └── translation_service.dart  # 翻译服务（新增）
+│
+├── models/
+│   └── tts_result.dart           # TTS 结果模型（新增）
+│   └── llm_result.dart          # LLM 结果模型（新增）
+│   └── vision_result.dart       # 多模态结果模型（新增）
+│
+└── screens/
+    ├── home_screen.dart          # ASR 主界面（现有）
+    ├── tts_screen.dart          # TTS 界面（新增）
+    ├── llm_chat_screen.dart     # LLM 对话界面（新增）
+    └── vision_screen.dart       # 多模态界面（新增）
+```
+
+### 实施阶段
+
+#### Phase G: TTS 文字转语音
+- **状态**: 已完成
+- 新增 `TtsBackend` 接口（`lib/engines/base/tts_backend.dart`）
+- 实现 `SherpaTtsBackend`（`lib/engines/backends/sherpa_tts_backend.dart`）
+  - 支持 VITS / Kokoro / Matcha 模型自动检测
+  - 使用 sherpa_onnx OfflineTts 进行推理
+- 新增 `TtsService`（`lib/services/tts_service.dart`）
+  - 使用 just_audio 播放音频
+  - 内置 Float32→PCM 16-bit LE 转换和 WAV 文件生成
+  - 支持 speak()（生成+播放）和 generate()（仅生成）
+- 新增 `TtsScreen` UI（`lib/screens/tts_screen.dart`）
+  - 底部导航集成（`MainShell`）
+  - 支持声音选择、语速调节、生成按钮
+- 新增 `TtsConfig` 配置类（`lib/models/engine_config.dart`）
+- 添加 just_audio 依赖（`pubspec.yaml`）
+- **关键文件**: `lib/engines/base/tts_backend.dart`, `lib/engines/backends/sherpa_tts_backend.dart`, `lib/services/tts_service.dart`, `lib/screens/tts_screen.dart`, `lib/screens/main_shell.dart`, `lib/models/engine_config.dart`
+
+#### Phase H: 本地 LLM 对话
+- **状态**: 已完成（最小闭环）
+- 新增 `LlmBackend` 接口（`lib/engines/base/llm_backend.dart`）
+  - 定义 `LlmBackendState`、`LlmMessage`、`LlmStreamResult` 等模型
+  - 支持流式推理 `streamInfer()` 和同步推理 `infer()`
+- 实现 `GgufLlmBackend`（`lib/engines/backends/gguf_llm_backend.dart`）
+  - 使用 llama_cpp_dart `LlamaParent` 进行 GGUF 模型推理
+  - 支持流式输出和对话历史管理
+- 新增 `LlmService`（`lib/services/llm_service.dart`）
+  - 管理 LLM 会话和状态
+  - 支持流式推理和同步推理
+- 新增 `LlmChatScreen` UI（`lib/screens/llm_chat_screen.dart`）
+  - 底部导航集成（`MainShell`）
+  - 支持流式输出显示、温度调节、清空对话
+- 添加 llama_cpp_dart 依赖（`pubspec.yaml`）
+- 升级 archive 依赖（`^3.4.0` → `^4.0.9`）以解决依赖冲突
+- **关键文件**: `lib/engines/base/llm_backend.dart`, `lib/engines/backends/gguf_llm_backend.dart`, `lib/services/llm_service.dart`, `lib/screens/llm_chat_screen.dart`, `lib/screens/main_shell.dart`, `pubspec.yaml`
+
+#### Phase I: 文字翻译
+- **状态**: 已完成
+- 新增 `TranslationService`（`lib/services/translation_service.dart`）
+  - 使用 Whisper 的 `translate` 任务（未来用于语音翻译）
+  - 支持 PCM 音频和 WAV 文件翻译
+  - 支持中文→英文、英文→中文、自动检测三种方向
+- 新增 `TranslationScreen` UI（`lib/screens/translation_screen.dart`）
+  - 底部导航第四个 Tab
+  - 支持翻译方向切换、文本交换
+  - 使用 `LlmService.translateText()` 进行文字翻译
+  - 导航标签更新为"文字翻译"
+- **关键文件**: `lib/services/translation_service.dart`, `lib/services/llm_service.dart`, `lib/screens/translation_screen.dart`, `lib/screens/main_shell.dart`
+
+#### Phase J: 多模态图像理解（可选）
+- **状态**: 已完成（基础架构）
+- 新增 `VisionBackend` 接口（`lib/engines/base/vision_backend.dart`）
+  - 定义 `VisionBackendState`、`VisionResult` 等模型
+  - 定义 `understand()` 图像理解方法
+- 实现 `LlavaBackend`（`lib/engines/backends/llava_backend.dart`）
+  - 使用 llama_cpp_dart `LlamaParent.sendPromptWithImages()` 进行图像理解
+  - 支持 LLaVA 等 GGUF 格式多模态模型
+- 新增 `VisionService`（`lib/services/vision_service.dart`）
+  - 图像选择和理解流程管理
+  - 支持文件选择器选择图像
+- 新增 `VisionScreen` UI（`lib/screens/vision_screen.dart`）
+  - 底部导航第五个 Tab
+  - 支持图像选择、问题输入、结果展示
+- **关键文件**: `lib/engines/base/vision_backend.dart`, `lib/engines/backends/llava_backend.dart`, `lib/services/vision_service.dart`, `lib/screens/vision_screen.dart`, `lib/screens/main_shell.dart`
+- **注意**: 需要 GGUF 格式的 LLaVA/Moondream 等多模态模型，移动端内存需求较高（~2-3GB）
+
+### 提示词工程策略（保证小模型稳定性）
+
+1. **结构化提示词模板**：为每个能力设计专用 prompt
+2. **反思机制**：小模型输出后，引导自我检查
+3. **Chain of Thought**：复杂任务分步推理
+4. **输出格式约束**：JSON/结构化输出保证一致性
+5. **不限制输出长度**：避免人为限制模型能力
+
+### 对话交互设计
+
+**LLM 语音对话**：全程语音交互，类似 Siri 但完全本地
+```
+语音输入 → ASR → LLM 推理 → TTS 语音输出
+```
+- 默认语音进 → 语音出
+- 可切换文字模式
+
+**TTS 多声音支持**：
+- 支持多声音可选（女声/男声/不同风格）
+- sherpa-onnx VITS 多说话人版本
+- Kokoro 103 说话人
+
+**LLM 多模型支持**：
+- 默认：Qwen2-0.5B Q4（最小体积 ~300MB）
+- 支持全部 GGUF 量化模型：Gemma-2B、Phi-3-mini、Llama-3.2-1B 等
+- 模型下载后自动识别，无需硬编码
+
+**多模态能力**：
+- 看图说话：描述图片内容
+- 图文问答：回答关于图片的问题
+
+### 技术设计决策
+
+**TTS 策略**：
+- 等完整句子/段落后再 TTS 播报（连贯性优先）
+- TTS 流式合成，边生成边缓存
+- 最终 wav 完整保存用于回放
+
+**对话打断机制**：
+- 全程可随时说"停止"打断 AI 说话
+- VAD 检测静音自动结束录音
+- AI 说话时识别到"停止"/"取消"立即中断 TTS
+
+**LLM 模型发现机制**：
+- 混合模式：自动识别 + 手动覆盖
+- 读取 GGUF hparam 元数据自动识别架构
+- 自动适配 chat template（Llama/Qwen/Gemma/Phi）
+- 用户可手动指定 model type 覆盖自动识别
+
+**多模态模型选择**：
+- 优先复用已下载的 LLM 模型（如 Qwen/Gemma）
+- 同时支持独立多模态模型（LLaVA-Phi-3-mini）
+- CLIP 作为视觉编码器
+
+**流式响应架构**：
+```
+用户说完话 → ASR 识别完成 → LLM 流式推理 → TTS 句子完整后播报
+                ↓
+          可边识别边开始 LLM 推理（减少延迟）
+
+总延迟预算：~2-3 秒（可接受）
+```
+
+**内存管理策略**：
+- ASR + TTS + LLM 总预算 ~2GB
+- LLM 默认使用最小模型（Qwen2-0.5B）
+- 不用 TTS 时可卸载 TTS 模型释放内存
+- 实时显示当前内存使用状态
+
+### 验证标准
+
+每个 Phase 完成后：
+- `flutter analyze`：无错误
+- `flutter test`：所有测试通过
+- `flutter build apk --debug`：Android 构建通过
+- `flutter build ios --simulator --no-codesign`：iOS 构建通过
+- `flutter build macos`：macOS 构建通过
+- 真机功能验证：各能力端到端可用
