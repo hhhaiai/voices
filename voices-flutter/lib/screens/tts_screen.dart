@@ -37,10 +37,14 @@ class _TtsScreenState extends ConsumerState<TtsScreen> {
           await ModelDownloadManager().getBuiltinModelPath('sherpa_tts');
       if (modelPath != null && modelPath.isNotEmpty) {
         final success = await _ttsService.loadModel(modelPath);
-        if (success) return;
+        if (success) {
+          if (mounted) setState(() {});
+          return;
+        }
+        debugPrint('TTS 内置模型加载失败: ${_ttsService.errorMessage}');
       }
-    } catch (_) {
-      // ignore
+    } catch (e) {
+      debugPrint('TTS 内置模型加载异常: $e');
     }
 
     // 尝试从已下载模型中加载 TTS
@@ -53,15 +57,18 @@ class _TtsScreenState extends ConsumerState<TtsScreen> {
           if (entry is Directory) {
             final modelPath = entry.path;
             final success = await _ttsService.loadModel(modelPath);
-            if (success) return;
+            if (success) {
+              if (mounted) setState(() {});
+              return;
+            }
           }
         }
       }
-    } catch (_) {
-      // 忽略错误，静默等待用户在设置中下载模型
+    } catch (e) {
+      debugPrint('TTS 下载模型加载异常: $e');
     }
 
-    // 目前无内置 TTS 模型，需要用户在设置中下载
+    // TTS 模型未加载，用户可在设置中下载
   }
 
   @override

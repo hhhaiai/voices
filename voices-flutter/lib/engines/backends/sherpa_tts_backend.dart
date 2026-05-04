@@ -14,6 +14,7 @@ class SherpaTtsBackend implements TtsBackend {
   String? _modelDir;
   int _numSpeakers = 0;
   int _sampleRate = 0;
+  String? _lastError;
 
   TtsBackendState _state = TtsBackendState.idle;
 
@@ -27,7 +28,7 @@ class SherpaTtsBackend implements TtsBackend {
   bool get isLoaded => _tts != null;
 
   @override
-  String? get lastError => null;
+  String? get lastError => _lastError;
 
   @override
   String? get modelPath => _modelDir;
@@ -42,12 +43,14 @@ class SherpaTtsBackend implements TtsBackend {
   Future<bool> load(String modelPathOrDir) async {
     await unload();
     _state = TtsBackendState.loading;
+    _lastError = null;
 
     try {
       _ensureBindings();
 
       final resolvedDir = await _resolveModelDir(modelPathOrDir);
       if (resolvedDir == null) {
+        _lastError = '无法解析模型路径: $modelPathOrDir';
         _state = TtsBackendState.error;
         return false;
       }
@@ -55,6 +58,7 @@ class SherpaTtsBackend implements TtsBackend {
       // 检测模型类型并构建配置
       final modelConfig = await _detectAndBuildConfig(resolvedDir);
       if (modelConfig == null) {
+        _lastError = '无法检测模型类型或构建配置';
         _state = TtsBackendState.error;
         return false;
       }
@@ -71,6 +75,7 @@ class SherpaTtsBackend implements TtsBackend {
       _state = TtsBackendState.ready;
       return true;
     } catch (e) {
+      _lastError = e.toString();
       _state = TtsBackendState.error;
       return false;
     }
@@ -103,11 +108,17 @@ class SherpaTtsBackend implements TtsBackend {
 
     if (vitsModel != null) {
       // VITS 模型检测到
+      // vits-melo-tts-zh_en 使用 lexicon 方式，不需要 dataDir/phontab
+      // 配置: model.onnx + lexicon.txt + tokens.txt
+      final vitsLexicon = await _pickFirstExistingFile(modelDir, const [
+        'lexicon.txt',
+      ]);
       return sherpa_onnx.OfflineTtsModelConfig(
         vits: sherpa_onnx.OfflineTtsVitsModelConfig(
           model: vitsModel.path,
           tokens: vitsTokens?.path ?? '',
-          dataDir: modelDir.path,
+          lexicon: vitsLexicon?.path ?? '',
+          dataDir: '', // 不需要 dataDir
           noiseScale: _config.noiseScale,
           noiseScaleW: _config.noiseScaleW,
           lengthScale: _config.lengthScale,

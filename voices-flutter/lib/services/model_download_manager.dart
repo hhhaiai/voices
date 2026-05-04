@@ -274,19 +274,18 @@ class ModelDownloadManager {
     final builtin = ModelRegistry.preferredBuiltinForEngine(engineId);
     if (builtin == null) return null;
 
-    if (Platform.isAndroid && !builtin.requiresLocalFilesystem) {
-      // 保持 Android whisper/vosk 走历史 alias。
+    // Android whisper/vosk: 尝试使用历史 alias（native assets 加载路径）
+    // 只有明确使用 native assets 加载的引擎才尝试 alias
+    if (Platform.isAndroid &&
+        (engineId == 'whisper' || engineId == 'vosk')) {
       final alias = await _resolveBuiltinAlias(engineId);
       if (alias != null && alias.isNotEmpty) {
         return alias;
       }
     }
 
-    if (builtin.requiresLocalFilesystem || !Platform.isAndroid) {
-      return _extractBuiltinToFilesystem(builtin);
-    }
-
-    return null;
+    // 其他所有引擎: 从 assets 提取到本地
+    return _extractBuiltinToFilesystem(builtin);
   }
 
   /// 获取模型存储目录

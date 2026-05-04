@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../engines/base/llm_backend.dart';
 import '../services/llm_service.dart';
+import '../services/model_download_manager.dart';
 
 /// LLM 对话界面
 class LlmChatScreen extends ConsumerStatefulWidget {
@@ -34,7 +36,79 @@ class _LlmChatScreenState extends ConsumerState<LlmChatScreen> {
   }
 
   Future<void> _initLlm() async {
-    // TODO: 从设置中获取 LLM 模型路径
+    // 优先尝试从内置模型加载 LLM
+    try {
+      final modelPath =
+          await ModelDownloadManager().getBuiltinModelPath('gguf_llm');
+      if (modelPath != null && modelPath.isNotEmpty) {
+        final success = await _llmService.loadModel(modelPath);
+        if (success) {
+          if (mounted) setState(() {});
+          return;
+        }
+        debugPrint('LLM 内置模型加载失败: ${_llmService.errorMessage}');
+      }
+    } catch (e) {
+      debugPrint('LLM 内置模型加载异常: $e');
+    }
+
+    // 尝试从外部搜索路径加载 LLM
+    try {
+      final manager = ModelDownloadManager();
+      final externalPaths = manager.getExternalModelSearchPaths();
+      for (final basePath in externalPaths) {
+        final baseDir = Directory(basePath);
+        if (!await baseDir.exists()) continue;
+
+        // 扫描目录下的 GGUF 文件
+        await for (final entity in baseDir.list(recursive: true)) {
+          if (entity is File && entity.path.endsWith('.gguf')) {
+            final success = await _llmService.loadModel(entity.path);
+            if (success) {
+              if (mounted) setState(() {});
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('LLM 外部路径扫描异常: $e');
+    }
+
+    // 尝试从已下载模型中加载 LLM
+    try {
+      final modelDir = await ModelDownloadManager().getModelDir();
+      final llmDir = Directory('$modelDir/llm');
+      if (await llmDir.exists()) {
+        final entries = await llmDir.list().toList();
+        for (final entry in entries) {
+          if (entry is File && entry.path.endsWith('.gguf')) {
+            final modelPath = entry.path;
+            final success = await _llmService.loadModel(modelPath);
+            if (success) {
+              if (mounted) setState(() {});
+              return;
+            }
+          } else if (entry is Directory) {
+            final files = await entry.list().toList();
+            for (final file in files) {
+              if (file is File && file.path.endsWith('.gguf')) {
+                final modelPath = file.path;
+                final success = await _llmService.loadModel(modelPath);
+                if (success) {
+                  if (mounted) setState(() {});
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('LLM 模型加载异常: $e');
+    }
+
+    // LLM 模型未加载，用户可在设置中下载
   }
 
   @override

@@ -54,16 +54,8 @@ void main() {
   Future<void> mockBuiltinSenseVoiceAssets() async {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     final files = <String, List<int>>{
-      'assets/models/sensevoice-onnx/model_quant.onnx': List<int>.filled(64, 1),
+      'assets/models/sensevoice-onnx/model.int8.onnx': List<int>.filled(64, 1),
       'assets/models/sensevoice-onnx/tokens.txt': utf8.encode('a\nb'),
-      'assets/models/sensevoice-onnx/tokens.json': utf8.encode('["a","b"]'),
-      'assets/models/sensevoice-onnx/config.yaml':
-          utf8.encode('sample_rate: 16000'),
-      'assets/models/sensevoice-onnx/configuration.json':
-          utf8.encode('{"ok":true}'),
-      'assets/models/sensevoice-onnx/am.mvn': List<int>.filled(16, 2),
-      'assets/models/sensevoice-onnx/README.md':
-          utf8.encode('sensevoice built-in'),
     };
 
     binding.defaultBinaryMessenger.setMockMessageHandler('flutter/assets',
@@ -200,7 +192,7 @@ void main() {
     final resolved = await manager.resolveModelPath('sensevoice_onnx');
 
     expect(resolved, isNotNull);
-    expect(resolved!.endsWith('model_quant.onnx'), isTrue);
+    expect(resolved!.endsWith('model.int8.onnx'), isTrue);
     final modelFile = File(resolved);
     expect(await modelFile.exists(), isTrue);
 

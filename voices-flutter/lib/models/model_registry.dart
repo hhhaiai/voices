@@ -195,6 +195,22 @@ class ModelRegistry {
     // 下载地址: https://huggingface.co/csukuangfj/sherpa-onnx-vits-melo-tts-zh_en
     // 所需文件: model.onnx, tokens.txt
     // 注意: sherpa-onnx VITS 模型需要在 HuggingFace 接受 Terms 才能下载
+    // LLM 模型
+    DownloadableModelDefinition(
+      id: 'llm-tinyllama-q4',
+      engineId: 'gguf_llm',
+      name: 'TinyLlama 1.1B (Q4)',
+      version: '1.0.0',
+      downloadUrl:
+          'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+      sizeMB: 638,
+      notes: ['最小 LLM 模型', '适合移动端', '约 638MB'],
+      android: true,
+      ios: true,
+      macos: true,
+      linux: true,
+      windows: true,
+    ),
   ];
 
   static const List<BuiltinModelDefinition> builtinModels = [
@@ -233,15 +249,10 @@ class ModelRegistry {
       engineId: 'sensevoice_onnx',
       name: 'SenseVoice ONNX (Built-in)',
       assetBasePath: 'assets/models/sensevoice-onnx',
-      modelRelativePath: 'model_quant.onnx',
+      modelRelativePath: 'model.int8.onnx',
       requiredAssetFiles: [
-        'model_quant.onnx',
+        'model.int8.onnx',
         'tokens.txt',
-        'tokens.json',
-        'config.yaml',
-        'configuration.json',
-        'am.mvn',
-        'README.md',
       ],
       resolveToDirectory: false,
       requiresLocalFilesystem: true,

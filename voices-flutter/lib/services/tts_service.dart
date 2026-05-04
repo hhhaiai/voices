@@ -23,8 +23,13 @@ class TtsService {
   factory TtsService() => _instance;
   TtsService._internal();
 
-  final TtsBackend _backend = SherpaTtsBackend();
+  TtsBackend? _backend;
   final AudioPlayer _player = AudioPlayer();
+
+  TtsBackend get _backendInstance {
+    _backend ??= SherpaTtsBackend();
+    return _backend!;
+  }
 
   TtsServiceState _state = TtsServiceState.idle;
   String? _errorMessage;
@@ -33,10 +38,10 @@ class TtsService {
   double _currentSpeed = 1.0;
 
   /// 可用说话人数量
-  int get numSpeakers => _backend.numSpeakers;
+  int get numSpeakers => _backendInstance.numSpeakers;
 
   /// 输出采样率
-  int get sampleRate => _backend.sampleRate;
+  int get sampleRate => _backendInstance.sampleRate;
 
   /// 当前服务状态
   TtsServiceState get state => _state;
@@ -45,7 +50,7 @@ class TtsService {
   String? get errorMessage => _errorMessage;
 
   /// 是否已加载模型
-  bool get isLoaded => _backend.isLoaded;
+  bool get isLoaded => _backendInstance.isLoaded;
 
   /// 加载 TTS 模型
   Future<bool> loadModel(String modelPath) async {
@@ -53,13 +58,13 @@ class TtsService {
       _state = TtsServiceState.loading;
       _errorMessage = null;
 
-      final loaded = await _backend.load(modelPath);
+      final loaded = await _backendInstance.load(modelPath);
       if (loaded) {
         _currentModelPath = modelPath;
         _state = TtsServiceState.ready;
         return true;
       } else {
-        _errorMessage = _backend.lastError ?? '模型加载失败';
+        _errorMessage = _backendInstance.lastError ?? '模型加载失败';
         _state = TtsServiceState.error;
         return false;
       }
@@ -79,7 +84,7 @@ class TtsService {
     int speakerId = 0,
     double speed = 1.0,
   }) async {
-    if (!_backend.isLoaded) {
+    if (!_backendInstance.isLoaded) {
       _errorMessage = 'TTS 模型未加载';
       _state = TtsServiceState.error;
       return false;
@@ -90,7 +95,7 @@ class TtsService {
       _currentSpeaker = speakerId;
       _currentSpeed = speed;
 
-      final result = await _backend.synthesize(
+      final result = await _backendInstance.synthesize(
         text,
         sid: speakerId,
         speed: speed,
@@ -130,14 +135,14 @@ class TtsService {
   /// 生成语音并返回音频数据
   /// 用于预览或保存
   Future<TtsAudioResult?> generate(String text, {int speakerId = 0, double speed = 1.0}) async {
-    if (!_backend.isLoaded) {
+    if (!_backendInstance.isLoaded) {
       _errorMessage = 'TTS 模型未加载';
       return null;
     }
 
     try {
       _state = TtsServiceState.generating;
-      final result = await _backend.synthesize(
+      final result = await _backendInstance.synthesize(
         text,
         sid: speakerId,
         speed: speed,
@@ -160,14 +165,14 @@ class TtsService {
   /// 卸载模型
   Future<void> unload() async {
     await _player.stop();
-    await _backend.unload();
+    await _backendInstance.unload();
     _currentModelPath = null;
     _state = TtsServiceState.idle;
   }
 
   /// 预热模型
   Future<bool> warmup() async {
-    return _backend.warmup();
+    return _backendInstance.warmup();
   }
 
   /// 获取状态信息
