@@ -171,6 +171,9 @@ class ModelDownloadManager {
       await modelRoot.create(recursive: true);
     }
 
+    // 用于跟踪需要合并的分割文件
+    final splitFileMap = <String, List<String>>{};
+
     for (final relative in model.requiredAssetFiles) {
       final cleaned = relative.trim();
       if (cleaned.isEmpty) continue;
@@ -186,8 +189,35 @@ class ModelDownloadManager {
             data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
             flush: true,
           );
+
+          // 检测分割文件 (.part* 后缀)
+          if (_isSplitPartFile(cleaned)) {
+            final baseName = _getBaseNameFromPart(cleaned);
+            splitFileMap.putIfAbsent(baseName, () => []).add(target.path);
+          }
         } catch (_) {
           return null;
+        }
+      }
+    }
+
+    // 合并分割文件
+    for (final entry in splitFileMap.entries) {
+      final baseName = entry.key;
+      final partPaths = entry.value;
+      if (partPaths.isEmpty) continue;
+
+      // 按文件名排序 (partaa, partab, partac, ...)
+      partPaths.sort();
+      final mergedPath = '${modelRoot.path}/$baseName';
+      await _mergeSplitFiles(partPaths, mergedPath);
+
+      // 删除分割文件
+      for (final partPath in partPaths) {
+        try {
+          await File(partPath).delete();
+        } catch (_) {
+          // ignore deletion errors
         }
       }
     }
@@ -205,6 +235,39 @@ class ModelDownloadManager {
       return modelFile.path;
     }
     return null;
+  }
+
+  bool _isSplitPartFile(String filename) {
+    // 检测 filename 是否为 .part* 分割文件
+    // 例如: model.onnx.partaa, model.onnx.partab
+    final lastDot = filename.lastIndexOf('.');
+    if (lastDot <= 0) return false;
+    final suffix = filename.substring(lastDot + 1);
+    return suffix.startsWith('part') && suffix.length >= 5;
+  }
+
+  String _getBaseNameFromPart(String partFilename) {
+    // 从 model.onnx.partaa 获取 model.onnx
+    final lastDot = partFilename.lastIndexOf('.');
+    if (lastDot <= 0) return partFilename;
+    // 找到 .part 前面的部分
+    final beforePart = partFilename.substring(0, lastDot);
+    return beforePart;
+  }
+
+  Future<void> _mergeSplitFiles(List<String> partPaths, String outputPath) async {
+    final outputFile = File(outputPath);
+    final sink = outputFile.openWrite();
+
+    for (final partPath in partPaths) {
+      final partFile = File(partPath);
+      if (await partFile.exists()) {
+        final bytes = await partFile.readAsBytes();
+        sink.add(bytes);
+      }
+    }
+
+    await sink.close();
   }
 
   Future<String?> _resolveBuiltinModelPathViaRegistry(String engineId) async {
@@ -235,6 +298,9 @@ class ModelDownloadManager {
     }
     return modelDir.path;
   }
+
+  /// 获取模型存储目录（公开方法）
+  Future<String> getModelDir() => _modelDir;
 
   /// 获取内置模型路径。
   /// - Android whisper/vosk: 返回历史 alias，交给 native 层从 assets 加载
@@ -308,8 +374,8 @@ class ModelDownloadManager {
 
         final totalUrls = downloadUrls.length;
 
-        // iOS 使用系统后台下载，其他平台使用 Dio
-        if (Platform.isIOS && _backgroundDownloadService.isSupported) {
+        // iOS/Android 使用系统后台下载，其他平台使用 Dio（带断点续传）
+        if (_backgroundDownloadService.isSupported) {
           await _downloadWithBackgroundService(
             downloadId: '${engine.id}_${version}_$i',
             url: currentUrl,
@@ -491,7 +557,7 @@ class ModelDownloadManager {
     _backgroundDownloadService.removeListener(downloadId);
   }
 
-  /// 使用 Dio 下载文件（带重试）
+  /// 使用 Dio 下载文件（带重试和断点续传）
   Future<void> _downloadWithDio({
     required String url,
     required String filePath,
@@ -500,37 +566,98 @@ class ModelDownloadManager {
     void Function(double progress)? onProgress,
   }) async {
     const maxRetries = 3;
+    final tempFile = File(filePath);
+
     for (var attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        await _dio.download(
-          url,
-          filePath,
-          onReceiveProgress: (received, total) {
-            if (total != -1) {
-              final perFileProgress = received / total;
-              final overallProgress =
-                  (fileIndex + perFileProgress) / totalUrls;
-              _downloadProgress[url] = overallProgress;
-              onProgress?.call(overallProgress);
+        // 检查是否支持断点续传（部分文件存在时）
+        int existingBytes = 0;
+        bool supportsResume = false;
+
+        if (await tempFile.exists()) {
+          existingBytes = await tempFile.length();
+          if (existingBytes > 0) {
+            // 尝试断点续传：发送 HEAD 请求检查服务器支持
+            try {
+              final headResponse = await _dio.head(url);
+              final acceptRanges = headResponse.headers.value('accept-ranges');
+              final contentLength = headResponse.headers.value('content-length');
+              supportsResume = acceptRanges == 'bytes' ||
+                  (contentLength != null && int.tryParse(contentLength)! > existingBytes);
+            } catch (_) {
+              // HEAD 请求失败，尝试直接续传
+              supportsResume = existingBytes > 0;
             }
-          },
-        );
+          }
+        }
+
+        if (supportsResume && existingBytes > 0) {
+          // 断点续传模式
+          await _dio.download(
+            url,
+            filePath,
+            options: Options(
+              headers: {'Range': 'bytes=$existingBytes-'},
+            ),
+            onReceiveProgress: (received, total) {
+              if (total != -1) {
+                // total 是剩余字节数，不是总大小
+                final actualTotal = existingBytes + received;
+                final perFileProgress = actualTotal / (existingBytes + (total - existingBytes).abs());
+                final overallProgress = (fileIndex + perFileProgress) / totalUrls;
+                _downloadProgress[url] = overallProgress;
+                onProgress?.call(overallProgress);
+              }
+            },
+            deleteOnError: false,
+          );
+        } else {
+          // 普通下载模式
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+          await _dio.download(
+            url,
+            filePath,
+            onReceiveProgress: (received, total) {
+              if (total != -1) {
+                final perFileProgress = received / total;
+                final overallProgress = (fileIndex + perFileProgress) / totalUrls;
+                _downloadProgress[url] = overallProgress;
+                onProgress?.call(overallProgress);
+              }
+            },
+          );
+        }
         break;
       } on DioException catch (e) {
         if (attempt == maxRetries - 1) rethrow;
 
+        // 网络错误时保留已下载部分，尝试断点续传
         if (e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.receiveTimeout ||
             e.type == DioExceptionType.sendTimeout ||
             e.type == DioExceptionType.connectionError) {
-          final incompleteFile = File(filePath);
-          if (await incompleteFile.exists()) {
-            await incompleteFile.delete();
+          // 检查是否有部分文件可用于续传
+          final hasPartial = await tempFile.exists() && await tempFile.length() > 0;
+          if (!hasPartial) {
+            // 无法续传，删除后重试
+            final incompleteFile = File(filePath);
+            if (await incompleteFile.exists()) {
+              await incompleteFile.delete();
+            }
           }
           await Future<void>.delayed(Duration(seconds: (attempt + 1) * 2));
           continue;
         }
-        rethrow;
+
+        // 其他错误（404、500等）直接重试整个文件
+        final incompleteFile = File(filePath);
+        if (await incompleteFile.exists()) {
+          await incompleteFile.delete();
+        }
+        await Future<void>.delayed(Duration(seconds: (attempt + 1) * 2));
+        continue;
       }
     }
   }

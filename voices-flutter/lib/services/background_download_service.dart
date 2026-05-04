@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -47,16 +48,24 @@ class BackgroundDownloadEvent {
         return BackgroundDownloadStatus.error;
       case 'cancelled':
         return BackgroundDownloadStatus.cancelled;
+      case 'pending':
+        return BackgroundDownloadStatus.idle;
+      case 'paused':
+        return BackgroundDownloadStatus.downloading;
+      case 'running':
+        return BackgroundDownloadStatus.downloading;
+      case 'failed':
+        return BackgroundDownloadStatus.error;
       default:
         return BackgroundDownloadStatus.idle;
     }
   }
 }
 
-/// iOS 后台下载服务
+/// 后台下载服务
 ///
-/// 使用 NSURLSession 实现系统级后台下载，支持 app 后台运行时继续下载。
-/// 仅在 iOS 平台可用，其他平台回退到 Dart Dio 下载。
+/// 使用系统级后台下载（iOS NSURLSession / Android DownloadManager），
+/// 支持 app 后台运行时继续下载和断点续传。
 class BackgroundDownloadService {
   static final BackgroundDownloadService _instance =
       BackgroundDownloadService._internal();
@@ -64,15 +73,16 @@ class BackgroundDownloadService {
   BackgroundDownloadService._internal();
 
   static const MethodChannel _channel =
-      MethodChannel('com.sanbo.voices/background_download');
+      MethodChannel('com.sanbo.voices/download');
   static const EventChannel _eventChannel =
-      EventChannel('com.sanbo.voices/background_download_events');
+      EventChannel('com.sanbo.voices/download_events');
 
   Stream<BackgroundDownloadEvent>? _eventStream;
   final Map<String, void Function(BackgroundDownloadEvent)> _listeners = {};
+  final Map<String, String> _downloadIdToPath = {};
 
-  /// 是否支持后台下载（仅 iOS）
-  bool get isSupported => Platform.isIOS;
+  /// 是否支持后台下载（iOS 和 Android）
+  bool get isSupported => Platform.isIOS || Platform.isAndroid;
 
   /// 获取事件流
   Stream<BackgroundDownloadEvent> get eventStream {
@@ -107,9 +117,7 @@ class BackgroundDownloadService {
     required String destPath,
     Map<String, String> headers = const {},
   }) async {
-    if (!isSupported) {
-      throw UnsupportedError('后台下载仅支持 iOS 平台');
-    }
+    _downloadIdToPath[downloadId] = destPath;
 
     await _channel.invokeMethod('startDownload', {
       'downloadId': downloadId,
@@ -121,19 +129,14 @@ class BackgroundDownloadService {
 
   /// 取消下载
   Future<void> cancelDownload(String downloadId) async {
-    if (!isSupported) return;
-
     await _channel.invokeMethod('cancelDownload', {
       'downloadId': downloadId,
     });
+    _downloadIdToPath.remove(downloadId);
   }
 
   /// 获取下载状态
   Future<Map<String, dynamic>> getDownloadStatus(String downloadId) async {
-    if (!isSupported) {
-      return {'id': downloadId, 'status': 'idle', 'progress': 0.0};
-    }
-
     final result = await _channel.invokeMethod('getDownloadStatus', {
       'downloadId': downloadId,
     });

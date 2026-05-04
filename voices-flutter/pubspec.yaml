@@ -43,4 +43,5 @@ flutter:
     - assets/models/whisper-tiny/
     - assets/models/vosk-cn/
     - assets/models/sensevoice-onnx/
+    - assets/models/tts-vits/
     # MODEL_BUNDLE_END

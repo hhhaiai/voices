@@ -190,6 +190,11 @@ class ModelRegistry {
       linux: true,
       windows: true,
     ),
+    // TTS 模型需要用户手动下载（需要 HuggingFace 认证接受 Terms）
+    // 下载后放置到 models/tts/<version>/ 目录
+    // 下载地址: https://huggingface.co/csukuangfj/sherpa-onnx-vits-melo-tts-zh_en
+    // 所需文件: model.onnx, tokens.txt
+    // 注意: sherpa-onnx VITS 模型需要在 HuggingFace 接受 Terms 才能下载
   ];
 
   static const List<BuiltinModelDefinition> builtinModels = [
@@ -240,6 +245,32 @@ class ModelRegistry {
       ],
       resolveToDirectory: false,
       requiresLocalFilesystem: true,
+      android: true,
+      ios: true,
+      macos: true,
+      linux: true,
+      windows: true,
+    ),
+    BuiltinModelDefinition(
+      id: 'builtin-tts-vits',
+      engineId: 'sherpa_tts',
+      name: 'VITS TTS (Built-in)',
+      assetBasePath: 'assets/models/tts-vits',
+      modelRelativePath: 'model.onnx',
+      // model.onnx 被分割成多个 .part* 文件以绕过 GitHub 100MB 限制
+      // 合并方式: model.onnx.partaa + model.onnx.partab + ... = model.onnx
+      requiredAssetFiles: [
+        'model.onnx.partaa',
+        'model.onnx.partab',
+        'model.onnx.partac',
+        'model.onnx.partad',
+        'model.int8.onnx.partaa',
+        'model.int8.onnx.partab',
+        'tokens.txt',
+        'lexicon.txt',
+      ],
+      resolveToDirectory: true,
+      requiresLocalFilesystem: false,
       android: true,
       ios: true,
       macos: true,

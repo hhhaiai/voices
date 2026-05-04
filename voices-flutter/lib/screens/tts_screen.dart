@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/tts_service.dart';
+import '../services/model_download_manager.dart';
 
 /// TTS 文字转语音界面
 class TtsScreen extends ConsumerStatefulWidget {
@@ -28,8 +31,37 @@ class _TtsScreenState extends ConsumerState<TtsScreen> {
   }
 
   Future<void> _initTts() async {
-    // TODO: 从设置中获取 TTS 模型路径
-    // 目前使用默认路径或提示用户配置
+    // 优先尝试从内置模型加载 TTS
+    try {
+      final modelPath =
+          await ModelDownloadManager().getBuiltinModelPath('sherpa_tts');
+      if (modelPath != null && modelPath.isNotEmpty) {
+        final success = await _ttsService.loadModel(modelPath);
+        if (success) return;
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    // 尝试从已下载模型中加载 TTS
+    try {
+      final modelDir = await ModelDownloadManager().getModelDir();
+      final ttsDir = Directory('$modelDir/tts');
+      if (await ttsDir.exists()) {
+        final entries = await ttsDir.list().toList();
+        for (final entry in entries) {
+          if (entry is Directory) {
+            final modelPath = entry.path;
+            final success = await _ttsService.loadModel(modelPath);
+            if (success) return;
+          }
+        }
+      }
+    } catch (_) {
+      // 忽略错误，静默等待用户在设置中下载模型
+    }
+
+    // 目前无内置 TTS 模型，需要用户在设置中下载
   }
 
   @override
