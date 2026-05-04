@@ -161,3 +161,60 @@ SenseVoiceConfig createSenseVoiceConfig(Map<String, dynamic> map) {
 VoskConfig createVoskConfig(Map<String, dynamic> map) {
   return VoskConfig.fromMap(map);
 }
+
+/// TTS 引擎配置
+class TtsConfig {
+  final double noiseScale;
+  final double noiseScaleW;
+  final double lengthScale;
+  final int numThreads;
+  final String provider;
+  final bool debug;
+
+  const TtsConfig({
+    this.noiseScale = 0.667,
+    this.noiseScaleW = 0.8,
+    this.lengthScale = 1.0,
+    this.numThreads = 4,
+    this.provider = 'cpu',
+    this.debug = false,
+  });
+
+  TtsConfig copyWith({
+    double? noiseScale,
+    double? noiseScaleW,
+    double? lengthScale,
+    int? numThreads,
+    String? provider,
+    bool? debug,
+  }) {
+    return TtsConfig(
+      noiseScale: noiseScale ?? this.noiseScale,
+      noiseScaleW: noiseScaleW ?? this.noiseScaleW,
+      lengthScale: lengthScale ?? this.lengthScale,
+      numThreads: numThreads ?? this.numThreads,
+      provider: provider ?? this.provider,
+      debug: debug ?? this.debug,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'noiseScale': noiseScale,
+        'noiseScaleW': noiseScaleW,
+        'lengthScale': lengthScale,
+        'numThreads': numThreads,
+        'provider': provider,
+        'debug': debug,
+      };
+
+  static TtsConfig fromMap(Map<String, dynamic> map) {
+    return TtsConfig(
+      noiseScale: (map['noiseScale'] as num?)?.toDouble() ?? 0.667,
+      noiseScaleW: (map['noiseScaleW'] as num?)?.toDouble() ?? 0.8,
+      lengthScale: (map['lengthScale'] as num?)?.toDouble() ?? 1.0,
+      numThreads: map['numThreads'] as int? ?? 4,
+      provider: map['provider'] as String? ?? 'cpu',
+      debug: map['debug'] as bool? ?? false,
+    );
+  }
+}

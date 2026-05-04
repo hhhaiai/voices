@@ -19,10 +19,12 @@ dependencies:
   go_router: ^13.0.0
   shared_preferences: ^2.2.2
   uuid: ^4.2.2
-  archive: ^3.4.0
+  archive: ^4.0.9
   crypto: ^3.0.5
   sherpa_onnx: ^1.12.25
   file_picker: ^8.0.0
+  just_audio: ^0.9.36
+  llama_cpp_dart: ^0.2.2
 
 dev_dependencies:
   flutter_test:

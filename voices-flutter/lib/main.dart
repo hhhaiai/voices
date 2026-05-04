@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/settings_screen.dart';
+import 'screens/tts_screen.dart';
 import 'services/model_download_manager.dart';
 
 Future<void> main() async {
@@ -55,8 +56,9 @@ class VoicesApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       initialRoute: '/',
       routes: {
-        '/': (context) => const HomeScreen(),
+        '/': (context) => const MainShell(),
         '/settings': (context) => const SettingsScreen(),
+        '/tts': (context) => const TtsScreen(),
       },
     );
   }

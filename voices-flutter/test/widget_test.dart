@@ -21,6 +21,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('实时语音转写'), findsOneWidget);
-    expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.mic_rounded), findsNWidgets(2)); // 底部导航两个 tab 各一个 mic 图标
   });
 }
